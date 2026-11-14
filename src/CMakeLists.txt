@@ -1390,7 +1390,9 @@ if( NOT WIN32 AND NOT APPLE )
 		set_target_properties(zdoom PROPERTIES
 			#allow libzmusic.so.1 library in same folder as executable at runtime
 			INSTALL_RPATH "\$ORIGIN:\$ORIGIN/zmusic/build/source"
-			BUILD_WITH_INSTALL_RPATH ON
+			BUILD_RPATH "\$ORIGIN"
+			# Keep CMake's dependency paths while running an uninstalled build.
+			BUILD_WITH_INSTALL_RPATH OFF
 		)
 	endif()
 endif()

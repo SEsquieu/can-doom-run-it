@@ -32,3 +32,8 @@
 /build_vc2019-32
 /build__
 gzdoom-crash.log
+
+# Project tooling and local build overrides
+__pycache__/
+*.pyc
+/CMakeUserPresets.json
