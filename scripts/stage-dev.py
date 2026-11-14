@@ -13,6 +13,8 @@ if preset not in ("linux", "windows"):
 build = root / "build" / preset
 binary_dir = build / "Release" if preset == "windows" else build
 stage = root / "build/stage" / preset
+if stage.exists():
+    shutil.rmtree(stage)
 stage.mkdir(parents=True, exist_ok=True)
 name = "can-doom-run-it.exe" if preset == "windows" else "can-doom-run-it"
 shutil.copy2(binary_dir / name, stage / name)

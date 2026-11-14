@@ -253,3 +253,22 @@ and all component notices, and tests actual nonzero loopback PCM. The same pinne
 library built on Linux and rendered 4096 samples locally. This closes the runtime
 packaging gap without claiming audible playback or a Windows graphical engine
 test. Later hosted runs exercise the Windows DLL and corrected observer handshake.
+
+## Fresh-launch keyboard verification
+
+A separate Linux graphical test now launches with **zero command-line arguments**
+and empty XDG user state, using default renderer/audio/settings. It waits for
+advancing simulation and the full typed snapshot, presses actual F6/F7 through
+XTest, observes native authorization and a real E/Use event, disarms the endpoint,
+then types quit in the real console and verifies normal exit. This exposed a
+branding/resource mismatch: the engine's default soundfont name used
+can-doom-run-it while the build copied gzdoom.sf2. The post-build resource now
+uses the derivative's expected filename; the fresh-launch music lookup error is
+gone. No commercial data or font content changed.
+
+The independent application now stays visible in Windows task switching and
+accepts normal later focus, while its initial ShowWindow uses no-activation.
+Linux sets the corresponding no-initial-focus hint. This preserves intentional
+user routing without hiding the external app from Alt-Tab. The default-startup
+test and all gameplay/OS tests retain logs for review; Windows interactive engine
+graphics still need hands-on testing.

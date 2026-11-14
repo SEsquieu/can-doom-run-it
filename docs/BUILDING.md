@@ -18,7 +18,7 @@ are fixed. Update the image digest deliberately when refreshing the environment.
 sudo apt-get update
 sudo apt-get install --no-install-recommends build-essential git cmake ninja-build \
   python3 pkg-config libsdl2-dev libvpx-dev libbz2-dev libgl-dev \
-  libx11-dev libxcursor-dev libasound2-dev libxcb1-dev libopenal1
+  libx11-dev libxcursor-dev libasound2-dev libxcb1-dev libopenal1 libxtst6
 python3 scripts/build-zmusic.py
 python3 scripts/fetch-free-assets.py
 cmake --preset linux
@@ -142,3 +142,9 @@ and rendering, not physical audio playback. Linux audio hardware remains a host
 runtime requirement. Linux Actions ZIP extraction may normalize executable
 permissions; run `chmod +x can-doom-run-it doom-io-input-lab` for that development
 artifact. Normal local CMake builds retain executable permissions.
+
+`xvfb-run -a python3 scripts/test-first-run.py` performs a fresh **zero-argument**
+launch, using actual X11 F6/F7/Use keys and normal console quit instead of seeded
+aliases or renderer/configuration arguments. It requires `libxtst6`. CI runs it
+in addition to the isolated, deterministic gameplay fixtures. The bundled
+soundfont's output name matches the derivative's native default patch name.

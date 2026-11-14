@@ -161,7 +161,7 @@ int main(int argc,char** argv)
 #ifdef _WIN32
     WNDCLASSA cls{}; cls.lpfnWndProc=WindowProc; cls.hInstance=GetModuleHandleA(nullptr); cls.lpszClassName="DoomIOInputLab"; cls.hCursor=LoadCursor(nullptr,IDC_ARROW);
     if (!RegisterClassA(&cls) && GetLastError()!=ERROR_CLASS_ALREADY_EXISTS) return 2;
-    HWND window=CreateWindowExA(WS_EX_NOACTIVATE,cls.lpszClassName,"DOOM I/O - Input Lab",WS_OVERLAPPEDWINDOW,40,40,1000,600,nullptr,nullptr,cls.hInstance,nullptr);
+    HWND window=CreateWindowExA(WS_EX_APPWINDOW,cls.lpszClassName,"DOOM I/O - Input Lab",WS_OVERLAPPEDWINDOW,40,40,1000,600,nullptr,nullptr,cls.hInstance,nullptr);
     if (!window) return 3;
     ShowWindow(window,SW_SHOWNOACTIVATE); SetTimer(window,1,16,nullptr);
     MSG message; while (GetMessageA(&message,nullptr,0,0)>0) { TranslateMessage(&message); DispatchMessageA(&message); }
@@ -176,6 +176,10 @@ int main(int argc,char** argv)
     xcb_change_property(connection,XCB_PROP_MODE_REPLACE,window,XCB_ATOM_WM_CLASS,XCB_ATOM_STRING,8,sizeof(wmclass)-1,wmclass);
     const char title[]="DOOM I/O - Input Lab";
     xcb_change_property(connection,XCB_PROP_MODE_REPLACE,window,XCB_ATOM_WM_NAME,XCB_ATOM_STRING,8,sizeof(title)-1,title);
+    // Do not steal DOOM's focus on first show; allow ordinary later activation.
+    const char userTimeName[]="_NET_WM_USER_TIME";
+    auto* userTime=xcb_intern_atom_reply(connection,xcb_intern_atom(connection,0,sizeof(userTimeName)-1,userTimeName),nullptr);
+    if (userTime) { const unsigned zero=0; xcb_change_property(connection,XCB_PROP_MODE_REPLACE,window,userTime->atom,XCB_ATOM_CARDINAL,32,1,&zero); std::free(userTime); }
     auto gc=xcb_generate_id(connection); unsigned gcvalues[]={0xa0e6e1,0x0c141d};
     xcb_create_gc(connection,gc,window,XCB_GC_FOREGROUND|XCB_GC_BACKGROUND,gcvalues);
     xcb_map_window(connection,window); xcb_flush(connection);
