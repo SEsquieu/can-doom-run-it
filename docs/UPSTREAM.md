@@ -13,6 +13,15 @@ favor of the project identity; the upstream README is retained verbatim in
 `docs/upstream/README.md`. Upstream LICENSE, notices, assets, and per-file
 copyrights remain intact. See `docs/licenses/` and `docs/ASSETS.md`.
 
+## Dependent Phase 2 development
+
+PR #1 (`bootstrap/gzdoom-foundation`) contains the import. While it is open and
+main remains README-only, Phase 2 uses `feature/doom-io-runtime`, based directly
+on that foundation, with PR #2 targeting the bootstrap branch. Do not start engine
+work from the disconnected main tree. Merge the foundation preserving its merge
+parents first, then retarget the dependent PR to main. No rebase, squash or force
+push is needed. After integration, use the normal upstream merge procedure below.
+
 ## Configure a new clone
 
 ```sh

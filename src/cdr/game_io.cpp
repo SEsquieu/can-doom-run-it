@@ -113,8 +113,8 @@ UNSAFE_CCMD(cdr_arm) { Printf("Keyboard authority: %s\n",ToggleArm() ? "changed"
 CCMD(cdr_io_status)
 {
     const auto& state=GetLocalOutput(); const auto& c=state.bus.GetCounters();
-    Printf("Native I/O: enabled=%d ready=%d UDP 127.0.0.1:%u emitted=%" PRIu64 " submitted=%" PRIu64 " dropped=%" PRIu64 " session=%s controls=%u\n",
-        int(bool(cdr_io_enabled)),int(state.output.IsReady()),unsigned(cdr::DefaultOutputPort),c.emitted,c.submitted,c.dropped,state.bus.Session().c_str(),state.bus.Count());
+    Printf("Native I/O: enabled=%d ready=%d focused=%d grants=%u UDP 127.0.0.1:%u emitted=%" PRIu64 " submitted=%" PRIu64 " dropped=%" PRIu64 " session=%s controls=%u\n",
+        int(bool(cdr_io_enabled)),int(state.output.IsReady()),int(state.bus.Focused()),state.bus.Grants(),unsigned(cdr::DefaultOutputPort),c.emitted,c.submitted,c.dropped,state.bus.Session().c_str(),state.bus.Count());
 }
 DEFINE_ACTION_FUNCTION(_DoomIO, Define)
 {

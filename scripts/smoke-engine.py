@@ -28,7 +28,7 @@ def main():
     parser.add_argument("--view", choices=["entry","monitor","buttons"], default="entry")
     parser.add_argument("--multiplayer", action="store_true", help="Check authority suppression in a one-player multiplayer host")
     parser.add_argument("--renderer", choices=[0,4], type=int, default=0)
-    parser.add_argument("--backend", choices=[0,2], type=int, default=2)
+    parser.add_argument("--backend", choices=[0,1,2], type=int, default=2)
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--controls", action="store_true", help="Exercise native controls through actual gameplay")
     parser.add_argument("--disable-output", action="store_true", help="Expect no events with output disabled")
@@ -97,8 +97,8 @@ def main():
         chain = chain.replace("cdr_io_status; ", "")
         chain = chain.replace("quit", f'screenshot "{args.screenshot.resolve().as_posix()}"; wait 2; cdr_io_status; quit')
     if args.external:
-        blur="echo CDR_BLUR_REQUEST; wait 21; " if os.name=="posix" else ""
-        chain=chain.replace("quit", blur+"menu_main; wait 10; echo CDR_MENU_CLEANUP; cdr_io_status; quit")
+        blur="echo CDR_BLUR_REQUEST; wait 21; echo CDR_FOCUS_CHECK; cdr_io_status; " if os.name=="posix" else ""
+        chain=chain.replace("quit", blur+"menu_main; wait 10; echo CDR_MENU_CLEANUP; cdr_io_status; wait 14; quit")
     chain = "echo CDR_SMOKE_BEGIN; " + chain.replace("quit", "echo CDR_SMOKE_DONE; quit")
     (work / "engine.ini").write_text(
         f"[LastRun]\nVersion=225\n[GlobalSettings]\nvid_preferbackend={args.backend}\n"
@@ -174,6 +174,7 @@ def main():
                                            cwd=work, env=environment, start_new_session=os.name == "posix")
                 deadline = time.monotonic() + args.timeout
                 blurred=False
+                endpoint_closed=False
                 while process.poll() is None:
                     console = work / "console.log"
                     diagnostic = console.read_text(errors="replace") if console.exists() else ""
@@ -184,6 +185,15 @@ def main():
                     if args.external and os.name=="posix" and not blurred and "CDR_BLUR_REQUEST" in diagnostic:
                         blur_x11_window()
                         blurred=True
+                    if args.external and not endpoint_closed and "CDR_MENU_CLEANUP" in diagnostic:
+                        try:
+                            before_close=json.loads(report.read_text())
+                            if before_close["held"]!=0 or before_close["mode"]!=0:
+                                raise RuntimeError("Focus loss left external state active before shutdown")
+                            os.kill(before_close["pid"],signal.SIGTERM)
+                            endpoint_closed=True
+                        except (FileNotFoundError,json.JSONDecodeError):
+                            pass
                     if time.monotonic() >= deadline:
                         raise RuntimeError("Engine smoke test timed out")
                     drain()
@@ -297,6 +307,10 @@ def validate_room(args, messages, text):
     if by_id["toggle.power"][0]["value"]!=[1,0] or by_id["selector.mode"][0]["value"]!=[1,0]:
         raise SystemExit("Use instruments did not change their persistent state")
     if args.external:
+        if os.name=="posix":
+            before_menu=text.split("CDR_FOCUS_CHECK",1)[-1].split("CDR_MENU_CLEANUP",1)[0]
+            if "focused=0 grants=0 " not in before_menu:
+                raise SystemExit("Actual OS focus loss did not revoke authority before menu entry")
         focus=[m for m in messages if m.get("kind")=="lifecycle" and m.get("reason")=="focus_lost"]
         shutdown=[m for m in messages if m.get("kind")=="lifecycle" and m.get("reason")=="shutdown"]
         if not focus or not shutdown or focus[-1]["sequence"]>=shutdown[0]["sequence"]:

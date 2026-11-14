@@ -36,7 +36,9 @@ contract to distinguish events from state and process launches. `session` is a
 per-process opaque identifier. `sequence` advances for every message, including
 snapshots and failed submissions; it is monotonic within one session. `tick` is
 the engine simulation clock (35 ticks/second), not wall time. `revision` counts
-changes to that control. `player` identifies the local operator.
+changes within the current map definition lifetime; map-load cleanup resets
+revisions, but preserves the process session and global message sequence. `player`
+identifies the local operator.
 
 ## Typed definitions and states
 
@@ -157,3 +159,8 @@ Use and player positioning; no test-only Publish shortcut exists. The scripts
 save all definitions, snapshots, events, process logs and external output under
 `build/smoke/`. The optional observer accepts schema 1 bootstrap events for
 inspection; new consumers should implement schema 2 sessions and resynchronization.
+
+An out-of-process actuator must implement its own bounded queue, wall-clock
+watchdog, neutralization and explicit permissions. UDP subscription is diagnostic
+access, not actuation authority, and delivery is not reliable. Never replay a
+one-shot action during resynchronization or apply an incomplete snapshot.

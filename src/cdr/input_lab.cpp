@@ -114,7 +114,7 @@ void Paint(HDC dc,RECT rect)
     const int x=249+int(lab.x*210),y=280-int(lab.y*165);
     HBRUSH cursor=CreateSolidBrush(RGB(65,220,184)); auto oldBrush=SelectObject(dc,cursor); Ellipse(dc,x-10,y-10,x+10,y+10);
     SelectObject(dc,oldBrush); DeleteObject(cursor); SelectObject(dc,oldPen); DeleteObject(pen);
-    char value[160]; std::snprintf(value,sizeof(value),"BEACONS  %u    PULSES  %u",lab.fires,lab.pulses); text(510,115,value);
+    char value[160]; std::snprintf(value,sizeof(value),"STAMPS   %u    EXPORTS %u",lab.fires,lab.pulses); text(510,115,value);
     std::snprintf(value,sizeof(value),"MODE  %u   BRAKES  %u",lab.mode+1,lab.brakes); text(510,150,value);
     std::snprintf(value,sizeof(value),"POSITION  %+.2f / %+.2f",lab.x,lab.y); text(510,185,value);
     text(510,240,"ARROWS  move pen"); text(510,270,"SPACE   stamp marker"); text(510,300,"ENTER   export SVG");
@@ -221,7 +221,7 @@ int main(int argc,char** argv)
             color=0x41dcb8; xcb_change_gc(connection,gc,XCB_GC_FOREGROUND,&color);
             for (const auto& m:lab.marks) { xcb_rectangle_t stamp{std::int16_t(245+m.x*210),std::int16_t(276-m.y*165),8,8}; xcb_poly_rectangle(connection,window,gc,1,&stamp); }
             xcb_rectangle_t rover{std::int16_t(240+lab.x*210),std::int16_t(271-lab.y*165),18,18}; xcb_poly_fill_rectangle(connection,window,gc,1,&rover);
-            char value[128]; std::snprintf(value,sizeof(value),"BEACONS %u   PULSES %u",lab.fires,lab.pulses); text(510,120,value);
+            char value[128]; std::snprintf(value,sizeof(value),"STAMPS %u   EXPORTS %u",lab.fires,lab.pulses); text(510,120,value);
             std::snprintf(value,sizeof(value),"MODE %u   BRAKES %u",lab.mode+1,lab.brakes); text(510,155,value);
             std::snprintf(value,sizeof(value),"POSITION %+.2f / %+.2f",lab.x,lab.y); text(510,190,value);
             text(510,245,"ARROWS  move pen"); text(510,275,"SPACE   stamp marker"); text(510,305,"ENTER   export SVG");

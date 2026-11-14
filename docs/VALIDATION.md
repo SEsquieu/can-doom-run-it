@@ -222,3 +222,16 @@ zero held keys and neutral selector. Snapshot-consumer tests additionally reject
 mixed snapshot IDs and unknown-control state growth, and prevent trigger events
 from becoming latched cache state. Linux child reaping is nonblocking on the
 endpoint worker. These refinements retain the already successful gameplay path.
+
+The Windows artifact archive was downloaded and its SHA-256 matched the hosted
+digest (`abc2ee2f56732c1a084687144b8c5fc09cfbe46dd17f0b333e29627419beb0a2`
+for the 4810 checkpoint). Inspection confirmed both executables, original room,
+free IWAD, Freedoom notices and ZMusic DLLs. PE import inspection found only
+bundled ZMusic plus Windows system DLLs; the native application and ZMusic use
+the static MSVC runtime. This is packaging evidence, not Windows engine playtesting.
+
+Additional true-color room screenshots were reviewed with `vid_rendermode=4`
+on Mesa llvmpipe. A requested Vulkan startup fell back to GLES/OpenGL presentation
+in this host, so Vulkan runtime validation is not claimed. The software-rendered
+GLES fixture remains the primary repeatable CI gameplay path. Audio devices are
+unavailable in this container; smoke tests use `-nosound`.
