@@ -30,6 +30,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows" OR (NOT CMAKE_SYSTEM_NAME AND CMAKE_HOS
 endif()
 
 project(GZDoom)
+include(CTest)
 
 if (WIN32 AND VCPKG_TOOLCHAIN)
 	option(LIBVPX_VCPKG "Use libvpx from vcpkg" OFF)
@@ -413,6 +414,7 @@ add_subdirectory( wadsrc_bm )
 add_subdirectory( wadsrc_lights )
 add_subdirectory( wadsrc_extra )
 add_subdirectory( wadsrc_widepix )
+add_subdirectory( src/cdr )
 add_subdirectory( src )
 
 if( NOT CMAKE_CROSSCOMPILING )

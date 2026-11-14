@@ -60,6 +60,7 @@
 
 
 #include "doomdef.h"
+#include "cdr/game_io.h"
 #include "d_event.h"
 #include "p_local.h"
 #include "doomstat.h"
@@ -1241,6 +1242,7 @@ void P_CheckUse(player_t *player)
 		if (!player->usedown)
 		{
 			player->usedown = true;
+			cdr::PublishPlayerUse(player);
 			if (!P_TalkFacing(player->mo))
 			{
 				P_UseLines(player);

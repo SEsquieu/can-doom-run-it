@@ -77,8 +77,10 @@ LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a python3 scripts/smoke-engine.py \
   --iwad /usr/share/games/doom/freedoom2.wad
 ```
 
-Native control tests are added with the control-output milestone. Build
-artifacts, dependency checkouts, IWADs, and logs belong under ignored `build/`.
+Run native tests with `ctest --test-dir build/linux -C Release --output-on-failure`
+(Windows uses `build/windows`). See [CONTROL_OUTPUT.md](CONTROL_OUTPUT.md) for
+the native control demo and positive/negative gameplay tests. Build artifacts,
+dependency checkouts, IWADs, and logs belong under ignored `build/`.
 CI builds the complete engine on both target platforms and runs this smoke on Linux.
 The headless test uses software rendering with GLES presentation, caps rendering,
 and allows simulation without window focus. It does not validate every renderer.

@@ -24,6 +24,8 @@ for path in pk3s:
 for directory in ("soundfonts", "fm_banks"):
     source = binary_dir / directory
     shutil.copytree(source, stage / directory, dirs_exist_ok=True)
+for notice in (root / "fm_banks").glob("*.txt"):
+    shutil.copy2(notice, stage / "fm_banks" / notice.name)
 if preset == "windows":
     dlls = list((root / "build/deps/zmusic").rglob("*.dll"))
     if not dlls:

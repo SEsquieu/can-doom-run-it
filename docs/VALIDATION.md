@@ -56,3 +56,42 @@ Windows has a VS2022 x64 CI build definition; local Windows execution is not
 available in this Linux environment. CI results must be checked after pushing.
 No physical-device testing, signed installer, bundled free IWAD/playground, or
 zero-configuration device discovery is claimed by this foundation milestone.
+
+## Native control-output milestone
+
+The complete engine rebuilt successfully with `src/cdr/` linked into the native
+application and a small rising-edge hook in `P_CheckUse`. Temporary debugging
+instrumentation was removed before the final verification runs.
+
+- The native code and tests compiled independently with GCC's `-std=c++17
+  -Wall -Wextra -Wpedantic -Werror` and passed a real loopback UDP round trip.
+- `ctest --test-dir build/linux -C Release --output-on-failure`: **1/1 passed**.
+  The checks cover serialization, numeric bounds, invalid identifiers, missing
+  sinks, local send failures, sequence gaps/counters, and actual UDP delivery.
+- Live engine smoke, including a recorded demo: **two events emitted, two JSON
+  datagrams observed** by a separate process. Holding Use for 12 ticks generated
+  one event, followed by a second after release/repress. Observed ticks were
+  **70 and 92**, sequences **1 and 2**, schema **1**, control **player.use**.
+  Evidence: `build/smoke/live/events.jsonl` and the adjacent engine/console logs.
+- The standalone `scripts/listen-control.py --count 2 --timeout 30` receiver
+  independently captured the same two records from the final engine without
+  debugging instrumentation. Evidence: `build/smoke/standalone-observer.jsonl`.
+- Output-disabled smoke: **0 emitted / 0 observed**, normal map entry and exit.
+- Receiver-absent smoke: **2 submitted**, normal map entry and exit with no
+  observer, no retries, no blocking waits, and no crash.
+- Playback of the recorded interaction: **0 emitted / 0 observed**, verifying
+  suppression of replayed Use actions while output remains enabled.
+
+The fixture starts from a seeded, isolated configuration each time. Its timed
+command alias is loaded from INI before startup exec parsing; defining and using
+a new alias in one startup script is not valid in this engine. No preexisting
+user configuration or cached alias is required. Logs are retained by mode under
+ignored `build/smoke/`. See `docs/CONTROL_OUTPUT.md` for repeatable commands.
+
+The Linux/Windows workflow now builds the engine and runs native tests; Linux
+also drives the positive, disabled, receiver-absent, and replay gameplay cases.
+Remote run listings currently return no runs. The connected GitHub integration
+cannot read repository Actions settings (`403 Resource not accessible by
+integration`). The workflow is committed, but a successful hosted CI run and
+Windows execution remain **unverified**. No permission/settings changes were
+made to the GitHub repository to bypass that limitation.

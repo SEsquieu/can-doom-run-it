@@ -1188,6 +1188,7 @@ else()
 endif()
 
 set( GAME_SOURCES
+	cdr/game_io.cpp
 	${HEADER_FILES}
 	${NOT_COMPILED_SOURCE_FILES}
 	${SYSTEM_SOURCES}
@@ -1268,7 +1269,7 @@ if( UNIX )
 	endif()
 endif()
 
-target_link_libraries( zdoom ${PROJECT_LIBRARIES} lzma ${ZMUSIC_LIBRARIES} )
+target_link_libraries( zdoom ${PROJECT_LIBRARIES} lzma ${ZMUSIC_LIBRARIES} cdr_io )
 
 include_directories(
 	BEFORE

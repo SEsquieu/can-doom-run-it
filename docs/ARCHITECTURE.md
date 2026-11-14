@@ -10,14 +10,15 @@ are not the runtime or the sole implementation of control behavior.
 local player's Use press (P_CheckUse, simulation tick)
     -> generic trigger: player.use
     -> native bus: version + session sequence + tick + local player
-    -> built-in structured-output adapter
+    -> nonblocking UDP loopback adapter (127.0.0.1:19793)
     -> independent process observes one JSON record
 ```
 
 Only a rising edge emits; holding Use does not flood outputs. Existing use-line
-behavior continues unchanged. The first implementation will be single-thread
-owned on the simulation thread and target a local observable sink. It does not
-attempt real hardware discovery. The proof must be tested through actual gameplay.
+behavior continues unchanged. The first implementation is single-thread
+owned on the simulation thread and targets a local observable sink. It does not
+attempt real hardware discovery. See [CONTROL_OUTPUT.md](CONTROL_OUTPUT.md) for
+the current contract, demo, and real-gameplay test.
 
 ## Native I/O bus
 
