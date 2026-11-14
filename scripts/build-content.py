@@ -211,6 +211,12 @@ def main():
     for path in (ROOT/'content').rglob('*'):
         if path.is_file() and path.suffix!='.udmf': files[path.relative_to(ROOT/'content').as_posix()]=path.read_bytes()
     args.output.parent.mkdir(parents=True,exist_ok=True)
+    # Windows has no build RPATH. Keep the two pinned dynamic dependencies
+    # beside the development executable as well as in staged bundles.
+    for dependency in ('zmusic','openal'):
+        prefix=ROOT/'build/deps'/dependency
+        for runtime in prefix.rglob('*.dll') if prefix.exists() else ():
+            shutil.copy2(runtime,args.output.parent/runtime.name)
     temporary=args.output.with_suffix('.temporary')
     with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
         for name,data in sorted(files.items()):

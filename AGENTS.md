@@ -22,7 +22,7 @@ upstream engine, history, licenses, rendering, and gameplay compatibility.
 
 Linux: install the packages in `docs/BUILDING.md`, then run
 `python3 scripts/build-zmusic.py`, `python3 scripts/fetch-free-assets.py`, `cmake --preset linux`, and
-`cmake --build --preset linux`. Windows: the same dependency script with Python 3,
+`cmake --build --preset linux`. Windows: the same dependency script with Python 3 plus `python scripts/build-openal.py`,
 then `python scripts/fetch-free-assets.py`, `cmake --preset windows` and `cmake --build --preset windows` in VS2022 x64.
 CI must build both complete engines. See the build guide for executable locations.
 

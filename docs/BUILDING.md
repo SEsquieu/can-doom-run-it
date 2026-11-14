@@ -18,7 +18,7 @@ are fixed. Update the image digest deliberately when refreshing the environment.
 sudo apt-get update
 sudo apt-get install --no-install-recommends build-essential git cmake ninja-build \
   python3 pkg-config libsdl2-dev libvpx-dev libbz2-dev libgl-dev \
-  libx11-dev libxcursor-dev libasound2-dev libxcb1-dev
+  libx11-dev libxcursor-dev libasound2-dev libxcb1-dev libopenal1
 python3 scripts/build-zmusic.py
 python3 scripts/fetch-free-assets.py
 cmake --preset linux
@@ -29,8 +29,8 @@ CMake >=3.21 and GCC with C++17 are required. CI uses CMake 3.31.10; the preset
 sets the compatibility policy floor for vendored projects with older CMake
 minimums. ZMusic 1.1.14 is built from commit
 `89f3d65734470fb7ec0c1e69f73a0cfcc88ed557`, under `build/deps/`.
-Optional GTK dialogs/OpenAL runtime libraries can be installed for a full desktop
-experience. Vulkan headers and several codecs are vendored upstream.
+Optional GTK dialogs can be installed for desktop file selection. Linux audio
+uses the system OpenAL runtime (`libopenal1`). Vulkan headers and several codecs are vendored upstream.
 
 The executable is `build/linux/can-doom-run-it`; keep its generated PK3 files,
 soundfonts, and fm_banks alongside the application when assembling a package.
@@ -51,6 +51,7 @@ CMake >=3.21, Git, and Python 3. From a Developer PowerShell:
 
 ```powershell
 py -3 scripts/build-zmusic.py
+py -3 scripts/build-openal.py
 py -3 scripts/fetch-free-assets.py
 cmake --preset windows
 cmake --build --preset windows
@@ -58,7 +59,10 @@ cmake --build --preset windows
 
 The executable is `build/windows/Release/can-doom-run-it.exe`. ZMusic is built
 from the same source pin; GZDoom's vendored Windows libraries remain upstream.
-Supply the installed ZMusic DLL beside the executable when launching/packaging.
+The content build copies the installed ZMusic and OpenAL DLLs beside the
+executable. OpenAL Soft 1.24.3 is built from pinned commit
+`dc7d7054a5b4f3bec1dc23a42fd616a0847af948` with the static MSVC runtime; no
+separate audio or VC runtime installation is needed for the Windows bundle.
 CI stages the ZMusic DLL and uploads a complete development ZIP with verified
 Freedoom, HELIX, the independent native sketchpad and notices. Extract everything
 and launch the executable; no developer tools are needed to play. This is not a
@@ -129,3 +133,12 @@ X11/XCB, GL and audio libraries; use a compatible distro. Windows dependencies
 are adjacent to the executable. The input adapter targets classic Win32 messages
 or X11; native Wayland, Raw Input games and arbitrary-window pairing are not
 supported. See [PLAYING.md](PLAYING.md) and [VALIDATION.md](VALIDATION.md).
+
+The Windows workflow also tests the actual bundled audio DLL through OpenAL
+Soft's loopback renderer and checks nonzero PCM from a generated tone, without
+requiring speakers. `python scripts/test-audio-runtime.py --library
+build/deps/openal/bin/OpenAL32.dll` repeats it. This validates library loading
+and rendering, not physical audio playback. Linux audio hardware remains a host
+runtime requirement. Linux Actions ZIP extraction may normalize executable
+permissions; run `chmod +x can-doom-run-it doom-io-input-lab` for that development
+artifact. Normal local CMake builds retain executable permissions.

@@ -235,3 +235,21 @@ on Mesa llvmpipe. A requested Vulkan startup fell back to GLES/OpenGL presentati
 in this host, so Vulkan runtime validation is not claimed. The software-rendered
 GLES fixture remains the primary repeatable CI gameplay path. Audio devices are
 unavailable in this container; smoke tests use `-nosound`.
+
+## Audio packaging and hosted observer race
+
+Run 43550615167 at 20884d2a7 compiled both engines and passed Linux, but its
+Windows external-window test reported a missing final pulse. The parallel PR
+run 43550622296 passed. Investigation of the failed job (132311981861) showed
+that a fixed 30 ms probe delay allowed shutdown to invalidate the queued pulse
+before the desktop app processed it. The fixture now waits for independently
+observed SVG output, maintains the heartbeat, then explicitly acknowledges the
+probe before shutdown. Cleanup and the 350 ms runtime watchdog remain intact;
+there is no blanket timeout increase or skipped assertion.
+
+A Windows artifact audit also found missing dynamically loaded OpenAL. Packaging
+now builds official OpenAL Soft 1.24.3 from its pinned source, includes the DLL
+and all component notices, and tests actual nonzero loopback PCM. The same pinned
+library built on Linux and rendered 4096 samples locally. This closes the runtime
+packaging gap without claiming audible playback or a Windows graphical engine
+test. Later hosted runs exercise the Windows DLL and corrected observer handshake.

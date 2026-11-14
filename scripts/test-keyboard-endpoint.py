@@ -22,8 +22,28 @@ def main():
     export=report.with_suffix('.svg')
     export.unlink(missing_ok=True)
     process=subprocess.Popen([str(lab),'--report',str(report),'--export',str(export)])
+    driver=None
     try:
-        subprocess.run([str(probe)],check=True,timeout=12)
+        driver=subprocess.Popen([str(probe)],stdin=subprocess.PIPE)
+        deadline=time.monotonic()+8
+        observed=None
+        while time.monotonic()<deadline:
+            try:
+                observed=json.loads(report.read_text())
+                if observed['fires']==1 and observed['pulses']==1 and observed['strokes']>0 and observed['x']>0 and observed['y']>0:
+                    drawing=ET.parse(export).getroot()
+                    if drawing.findall('{http://www.w3.org/2000/svg}path') and drawing.findall('{http://www.w3.org/2000/svg}circle'):
+                        break
+            except (FileNotFoundError,json.JSONDecodeError,ET.ParseError):
+                pass
+            if driver.poll() is not None:
+                raise SystemExit(f'Native probe exited before the endpoint acknowledged output: {driver.returncode}')
+            time.sleep(0.02)
+        else:
+            raise SystemExit(f'External SVG export was not observed before shutdown: {observed}')
+        driver.communicate(input=b'\n',timeout=3)
+        if driver.returncode!=0:
+            raise SystemExit(f'Native probe failed: {driver.returncode}')
         deadline=time.monotonic()+3
         observed=None
         while time.monotonic()<deadline:
@@ -43,6 +63,11 @@ def main():
             raise SystemExit('External application did not produce a usable SVG drawing')
         print(f'PASS: independent application exported strokes and markers to {export}')
     finally:
+        if driver is not None and driver.poll() is None:
+            if driver.stdin and not driver.stdin.closed:
+                driver.stdin.write(b'\n'); driver.stdin.close()
+            try: driver.wait(timeout=3)
+            except subprocess.TimeoutExpired: driver.kill(); driver.wait()
         process.terminate()
         try: process.wait(timeout=3)
         except subprocess.TimeoutExpired: process.kill(); process.wait()

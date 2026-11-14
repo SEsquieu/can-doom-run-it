@@ -21,7 +21,12 @@ int main()
     bus.Publish("vector.pad",{1,1},1); bus.Publish("selector.mode",{2,0},1);
     for (unsigned i=0;i<15;++i) { keyboard.Tick(i); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
     bus.Publish("trigger.pulse",{},16);
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    // The independent observer acknowledges the actual SVG export before we
+    // begin shutdown. A fixed delay can discard a queued pulse under CI load.
+    std::atomic<bool> acknowledged{false}; int acknowledgement=EOF;
+    std::thread observer([&] { acknowledgement=std::getchar(); acknowledged=true; });
+    while (!acknowledged.load()) { keyboard.Tick(16); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+    observer.join();
     bus.Reset(ResetReason::Shutdown,16); keyboard.Stop();
-    return 0;
+    return acknowledgement=='\n' ? 0 : 3;
 }

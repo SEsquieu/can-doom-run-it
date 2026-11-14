@@ -43,3 +43,9 @@ letterforms; it uses no external font, texture pack, image service or commercial
 game material. Freedoom supplies the legal player/weapon, sounds and music.
 Generated PNG/WAD/PK3 files remain in ignored build directories. Content and its
 source are included through the exact-revision source link in each bundle.
+
+Windows bundles also include the unmodified OpenAL Soft 1.24.3 dynamic library,
+built from commit `dc7d7054a5b4f3bec1dc23a42fd616a0847af948`. Its LGPL library
+license, BSD/PFFFT and fmt notices are copied to `licenses/OpenAL`, with the exact
+source URL in SOURCE.txt. Keep this replaceable DLL separate from engine code;
+no proprietary audio runtime or manual redistributable install is introduced.
