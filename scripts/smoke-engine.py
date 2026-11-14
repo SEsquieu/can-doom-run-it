@@ -8,6 +8,8 @@ import argparse
 import json
 import os
 import socket
+import signal
+import time
 from pathlib import Path
 import subprocess
 
@@ -45,7 +47,8 @@ def main():
         chain = ("wait 70; +use; wait 12; -use; wait 10; +use; wait 4; -use; "
                  "wait 10; cdr_io_status; quit")
     if args.play_demo:
-        chain = "wait 100; cdr_io_status; wait 10; quit"
+        chain = "wait 100; cdr_io_status; quit"
+    chain = "echo CDR_SMOKE_BEGIN; " + chain.replace("quit", "echo CDR_SMOKE_DONE; quit")
     (work / "engine.ini").write_text(
         "[LastRun]\nVersion=225\n[GlobalSettings]\nvid_preferbackend=2\n"
         "vid_rendermode=0\nvid_activeinbackground=true\ni_pauseinbackground=false\n"
@@ -55,6 +58,7 @@ def main():
     )
     config.write_text("cdr_smoke\n", encoding="utf-8")
     log = work / "engine.log"
+    (work / "console.log").write_text("", encoding="utf-8")
     command = [str(engine), "-iwad", str(iwad), "-config", str(work / "engine.ini"),
                "-noautoload", "-noautoexec", "-nosound", "-nojoy", "-warp", "1",
                "-nomonsters", "-window", "-width", "640",
@@ -82,10 +86,26 @@ def main():
             listener.settimeout(0.2)
         with log.open("w", encoding="utf-8") as output:
             try:
-                result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT,
-                                        timeout=args.timeout, cwd=work, env=environment)
-            except subprocess.TimeoutExpired as exc:
-                raise SystemExit(f"Engine smoke test timed out; inspect {log} and {work / 'console.log'}") from exc
+                process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
+                                           cwd=work, env=environment, start_new_session=os.name == "posix")
+                deadline = time.monotonic() + args.timeout
+                while process.poll() is None:
+                    console = work / "console.log"
+                    diagnostic = console.read_text(errors="replace") if console.exists() else ""
+                    if 'Unknown command "cdr_smoke"' in diagnostic:
+                        raise RuntimeError("Startup alias was not registered before exec; this is a fixture failure")
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("Engine smoke test timed out")
+                    time.sleep(0.05)
+                result = process
+            except (RuntimeError, KeyboardInterrupt) as exc:
+                if process.poll() is None:
+                    if os.name == "posix":
+                        os.killpg(process.pid, signal.SIGKILL)
+                    else:
+                        process.kill()
+                    process.wait()
+                raise SystemExit(f"{exc}; inspect {log} and {work / 'console.log'}") from exc
         if listener is not None:
             while True:
                 try:
@@ -101,6 +121,8 @@ def main():
     text = log.read_text(encoding="utf-8", errors="replace")
     if result.returncode != 0 or "MAP01 - " not in text.upper():
         raise SystemExit(f"Engine failed to enter MAP01 and exit cleanly; inspect {log}\n{text[-4000:]}")
+    if "CDR_SMOKE_BEGIN" not in text or "CDR_SMOKE_DONE" not in text:
+        raise SystemExit(f"Timed gameplay commands did not complete; inspect {log}")
     if args.controls:
         expected = 0 if args.disable_output or args.play_demo else 2
         if f"emitted={expected} " not in text:

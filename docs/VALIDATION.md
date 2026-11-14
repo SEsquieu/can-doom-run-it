@@ -53,7 +53,7 @@ The development IWAD was Debian's Freedoom 0.13.0-2 `freedoom2.wad`, SHA-256
 No commercial data or downloaded IWAD is tracked.
 
 Windows has a VS2022 x64 CI build definition; local Windows execution is not
-available in this Linux environment. CI results must be checked after pushing.
+available in this Linux environment. See the hosted evidence reconciliation below.
 No physical-device testing, signed installer, bundled free IWAD/playground, or
 zero-configuration device discovery is claimed by this foundation milestone.
 
@@ -90,8 +90,33 @@ ignored `build/smoke/`. See `docs/CONTROL_OUTPUT.md` for repeatable commands.
 
 The Linux/Windows workflow now builds the engine and runs native tests; Linux
 also drives the positive, disabled, receiver-absent, and replay gameplay cases.
-Remote run listings currently return no runs. The connected GitHub integration
-cannot read repository Actions settings (`403 Resource not accessible by
-integration`). The workflow is committed, but a successful hosted CI run and
-Windows execution remain **unverified**. No permission/settings changes were
-made to the GitHub repository to bypass that limitation.
+At the time of bootstrap validation, remote run listings returned no runs and
+Actions settings inspection returned 403. That observation is superseded by the
+hosted evidence below; Windows interactive execution remains unverified.
+
+## Phase 2, stage 0: hosted evidence reconciliation
+
+Inspected run [43538971197](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43538971197)
+and its uploaded `test-logs-linux` artifact (14091121986), plus job logs.
+The run tested **b2f20409e**, not the later native-output commit b3f711895.
+
+- Windows job **132274769584 succeeded**: ZMusic, complete engine build,
+  development artifact staging and upload. This verifies Windows compilation
+  and packaging at that commit, not interactive Windows runtime or Phase 2 code.
+- Linux job **132274769165 compiled successfully**. `console.log` shows working
+  llvmpipe/GLES initialization and `MAP01 - Hydroelectric Plant`. It also reports
+  **`Unknown command "cdr_smoke"`** before gameplay. The uploaded `startup.cfg`
+  defines and invokes the alias in the same startup exec file. GZDoom defers
+  alias registration until after that invocation; the unknown command never
+  schedules the timed quit. The 120-second timeout was an orchestration failure,
+  not a compilation, rendering, map-loading, or insufficient-timeout problem.
+- b3f711895 already moved the alias into the INI loaded before exec parsing.
+  Phase 2 retains that fix and adds explicit begin/completion markers, immediate
+  failure on the known missing-alias diagnostic, and process-group cleanup.
+  The gameplay test remains enabled with its original timeout.
+- The hosted version string was `<unknown version>` because origin does not
+  carry upstream tags. `git describe --always` now provides commit provenance
+  in fresh clones without requiring a mass import of upstream tags.
+
+Downloaded evidence is retained untracked under `build/ci-evidence/`. No hosted
+run results are inferred from local tests, and no repository settings changed.
