@@ -30,10 +30,11 @@ int main()
     cdr::Bus bus([&](std::string_view packet) {
         packets.emplace_back(packet);
         return accept;
-    });
+    }, "test-session");
     CHECK(bus.Trigger(cdr::Control::PlayerUse, 70, 0));
-    CHECK(packets.back() == "{\"schema\":1,\"sequence\":1,\"type\":\"trigger\","
-        "\"control\":\"player.use\",\"tick\":70,\"player\":0}");
+    CHECK(packets.back() == "{\"schema\":2,\"session\":\"test-session\",\"sequence\":1,\"tick\":70,"
+        "\"kind\":\"event\",\"snapshot\":0,\"control\":\"player.use\",\"type\":\"trigger\",\"player\":0,"
+        "\"phase\":\"trigger\",\"value\":[1,0],\"revision\":1}");
     accept = false;
     CHECK(!bus.Trigger(cdr::Control::PlayerUse, 80, 0));
     accept = true;

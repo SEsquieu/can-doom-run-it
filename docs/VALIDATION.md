@@ -120,3 +120,27 @@ The run tested **b2f20409e**, not the later native-output commit b3f711895.
 
 Downloaded evidence is retained untracked under `build/ci-evidence/`. No hosted
 run results are inferred from local tests, and no repository settings changed.
+
+The stage-0 correction is now verified by hosted run
+[43542988421](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43542988421)
+at **e30ac4439**: Linux and Windows jobs both succeeded, including native tests,
+all Linux gameplay smoke cases, development staging, and artifact uploads.
+Run 43542277800 at the same commit also succeeded. This resolves the initial
+Linux timeout. It does not imply that later, unpushed Phase 2 changes were tested.
+
+## Phase 2 typed-model checkpoint
+
+The existing Bus now supports all six requested primitives, bounded typed
+metadata, schema 2 sessions/ordering, explicit transitions and transactional
+snapshots, stale leases and lifecycle neutralization. The original player Use
+hook and diagnostic receiver remain, updated intentionally for schema 2.
+
+Local checks: native serializer/UDP tests and typed-model tests pass (2/2 CTest),
+including all primitives, ranges, hold/release deduplication, stale values,
+initial snapshots/resync, session distinction, adapter absence, permission
+boundaries, focus/disable/map/shutdown cleanup, and capacity limits. Native code
+also compiled with GCC `-Wall -Wextra -Wpedantic -Werror`. Python protocol-consumer
+unit tests pass. The complete engine builds and the real player Use smoke still
+produces exactly two schema 2 events with the same session and increasing
+sequence/tick values. The script API is registered using GZDoom's native struct
+bindings, with no arbitrary I/O or permission-grant methods exposed to maps.

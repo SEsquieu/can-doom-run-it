@@ -10,6 +10,7 @@ import os
 import socket
 import signal
 import time
+from control_protocol import ControlState, MAX_DATAGRAM
 from pathlib import Path
 import subprocess
 
@@ -77,13 +78,28 @@ def main():
     if os.name == "posix":
         environment.update(XDG_CONFIG_HOME=str(work / "config"),
                            XDG_CACHE_HOME=str(work / "cache"))
-    events = []
+    events, messages = [], []
+    def drain():
+        if listener is None:
+            return
+        for _ in range(256):
+            try:
+                data, _ = listener.recvfrom(MAX_DATAGRAM + 1)
+            except BlockingIOError:
+                break
+            if len(data) > MAX_DATAGRAM:
+                raise SystemExit("Oversized event received")
+            record = json.loads(data)
+            messages.append(record)
+            if record.get("kind", "event") == "event" and record.get("control") == "player.use":
+                events.append(record)
     listener = None
     try:
         if args.controls and not args.no_listener:
             listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             listener.bind(("127.0.0.1", 19793))
-            listener.settimeout(0.2)
+            listener.setblocking(False)
+            listener.sendto(b"DIO/2 SNAPSHOT", ("127.0.0.1", 19794))
         with log.open("w", encoding="utf-8") as output:
             try:
                 process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
@@ -94,8 +110,11 @@ def main():
                     diagnostic = console.read_text(errors="replace") if console.exists() else ""
                     if 'Unknown command "cdr_smoke"' in diagnostic:
                         raise RuntimeError("Startup alias was not registered before exec; this is a fixture failure")
+                    if "Script error," in diagnostic or "Execution could not continue" in diagnostic:
+                        raise RuntimeError("Engine script initialization failed")
                     if time.monotonic() >= deadline:
                         raise RuntimeError("Engine smoke test timed out")
+                    drain()
                     time.sleep(0.05)
                 result = process
             except (RuntimeError, KeyboardInterrupt) as exc:
@@ -106,15 +125,7 @@ def main():
                         process.kill()
                     process.wait()
                 raise SystemExit(f"{exc}; inspect {log} and {work / 'console.log'}") from exc
-        if listener is not None:
-            while True:
-                try:
-                    data, _ = listener.recvfrom(257)
-                except socket.timeout:
-                    break
-                if len(data) > 256:
-                    raise SystemExit("Oversized event received")
-                events.append(json.loads(data))
+        drain()
     finally:
         if listener is not None:
             listener.close()
@@ -132,10 +143,16 @@ def main():
             if len(events) != expected:
                 raise SystemExit(f"Expected {expected} events, got {len(events)}: {events}")
             for index, event in enumerate(events, start=1):
-                if (event.get("schema") != 1 or event.get("type") != "trigger" or
+                if (event.get("schema") != 2 or not event.get("session") or event.get("type") != "trigger" or
                     event.get("control") != "player.use" or event.get("player") != 0 or
-                    event.get("sequence") != index or type(event.get("tick")) is not int):
+                    (index > 1 and event.get("sequence", 0) <= events[index-2]["sequence"]) or type(event.get("tick")) is not int):
                     raise SystemExit(f"Unexpected control event: {event}")
+            tracker = ControlState()
+            for record in messages:
+                tracker.accept(record)
+            if expected and not tracker.definitions:
+                raise SystemExit("No initial state snapshot received")
+            (work / "messages.jsonl").write_text("".join(json.dumps(m) + "\n" for m in messages), encoding="utf-8")
             if events and not (events[0]["tick"] >= 0 and events[1]["tick"] > events[0]["tick"] + 10):
                 raise SystemExit(f"Use hold/release timing did not match: {events}")
         print(f"PASS: {mode}, native emitted={expected}, observed={len(events)}")

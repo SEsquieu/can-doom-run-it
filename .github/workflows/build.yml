@@ -47,6 +47,8 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
       - name: Test native bus and loopback output
         run: ctest --test-dir build/${{ matrix.preset }} -C Release --output-on-failure
+      - name: Test protocol consumer
+        run: python -m unittest discover -s tests -p "test_*.py"
       - name: Run Linux engine smoke test
         if: runner.os == 'Linux'
         env:

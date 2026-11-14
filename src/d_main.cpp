@@ -45,6 +45,7 @@
 #include "d_gui.h"
 #include "m_random.h"
 #include "doomdef.h"
+#include "cdr/game_io.h"
 #include "doomstat.h"
 #include "gstrings.h"
 #include "filesystem.h"
@@ -1225,6 +1226,8 @@ void D_DoomLoop ()
 			I_SetFrameTime();
 
 			// process one or more tics
+			cdr::UpdateRuntime(AppActive && !paused && !pauseext && menuactive == MENU_Off,
+				gamestate == GS_LEVEL && !demoplayback && !netgame, std::uint64_t(gametic));
 			if (singletics)
 			{
 				I_StartTic ();
@@ -3826,6 +3829,7 @@ int GameMain()
 
 void D_Cleanup()
 {
+	cdr::ShutdownRuntime();
 	if (demorecording)
 	{
 		G_CheckDemoStatus();
