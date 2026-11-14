@@ -8,6 +8,9 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
+#include <vector>
+#include <cstdlib>
 #include <string>
 #include <thread>
 #ifdef _WIN32
@@ -24,17 +27,21 @@ namespace
 {
 struct Lab
 {
+    struct Stroke { double x0,y0,x1,y1; unsigned color; };
+    struct Mark { double x,y; unsigned color; };
     unsigned held=0,fires=0,pulses=0,brakes=0,mode=0;
     double x=0,y=0;
-    std::string report;
+    std::string report,exportPath;
+    std::vector<Stroke> strokes;
+    std::vector<Mark> marks;
     bool Down(Key key) const { return (held&(1u<<unsigned(key)))!=0; }
     void Input(Key key,bool down)
     {
         unsigned bit=1u<<unsigned(key);
         if (down && !(held&bit))
         {
-            if (key==Key::Space) ++fires;
-            if (key==Key::Enter) ++pulses;
+            if (key==Key::Space) { ++fires; if (marks.size()<1024) marks.push_back({x,y,mode}); }
+            if (key==Key::Enter) { ++pulses; Export(); }
             if (key==Key::B) ++brakes;
             if (key>=Key::One && key<=Key::Three) mode=unsigned(key)-unsigned(Key::One);
         }
@@ -43,19 +50,37 @@ struct Lab
     }
     void Step(double dt)
     {
+        const double beforeX=x,beforeY=y;
         double speed=Down(Key::Shift) ? 0.25 : 1.0;
         if (Down(Key::W)) speed*=2;
         if (Down(Key::S)) speed*=0.3;
         if (Down(Key::B)) speed=0;
         x=std::clamp(x+(double(Down(Key::Right))-double(Down(Key::Left)))*speed*dt,-1.0,1.0);
         y=std::clamp(y+(double(Down(Key::Up))-double(Down(Key::Down)))*speed*dt,-1.0,1.0);
+        if (Down(Key::Shift) && strokes.size()<4096 && (beforeX!=x || beforeY!=y))
+            strokes.push_back({beforeX,beforeY,x,y,mode});
+    }
+    void Export() const
+    {
+        if (exportPath.empty()) return;
+        std::error_code error;
+        std::filesystem::create_directories(std::filesystem::path(exportPath).parent_path(),error);
+        std::ofstream file(exportPath,std::ios::trunc);
+        const char* colors[]={"#41dcb8","#ffbd59","#9c91ff"};
+        file << "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 500\">\n"
+             << "<title>DOOM I/O sketch</title><rect width=\"500\" height=\"500\" fill=\"#0c141d\"/>\n";
+        for (const auto& s:strokes) file << "<path fill=\"none\" stroke=\"" << colors[s.color%3]
+            << "\" stroke-width=\"3\" d=\"M" << 250+s.x0*240 << ',' << 250-s.y0*240 << " L" << 250+s.x1*240 << ',' << 250-s.y1*240 << "\"/>\n";
+        for (const auto& m:marks) file << "<circle cx=\"" << 250+m.x*240 << "\" cy=\"" << 250-m.y*240 << "\" r=\"6\" fill=\"" << colors[m.color%3] << "\"/>\n";
+        file << "</svg>\n";
     }
     void Save() const
     {
         if (report.empty()) return;
         std::ofstream file(report,std::ios::trunc);
         file << "{\"held\":" << held << ",\"fires\":" << fires << ",\"pulses\":" << pulses
-             << ",\"brakes\":" << brakes << ",\"mode\":" << mode << ",\"x\":" << x << ",\"y\":" << y << "}\n";
+             << ",\"brakes\":" << brakes << ",\"mode\":" << mode << ",\"x\":" << x << ",\"y\":" << y
+             << ",\"strokes\":" << strokes.size() << ",\"marks\":" << marks.size() << "}\n";
     }
 };
 Lab lab;
@@ -73,17 +98,21 @@ void Paint(HDC dc,RECT rect)
     HFONT font=CreateFontA(19,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,ANSI_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,FIXED_PITCH,"Consolas");
     auto old=SelectObject(dc,font);
     auto text=[&](int x,int y,const char* s) { TextOutA(dc,x,y,s,int(std::strlen(s))); };
-    text(24,20,"DOOM I/O  |  INPUT LAB"); text(24,50,"Independent desktop rover - routed keyboard input");
+    text(24,20,"DOOM I/O  |  INPUT LAB / SKETCHPAD"); text(24,50,"Independent keyboard application - draw and export SVG");
     HPEN pen=CreatePen(PS_SOLID,1,RGB(37,62,72)); auto oldPen=SelectObject(dc,pen);
     for (int i=0;i<=10;++i) { MoveToEx(dc,24+i*45,100,nullptr); LineTo(dc,24+i*45,460); MoveToEx(dc,24,100+i*36,nullptr); LineTo(dc,474,100+i*36); }
+    const COLORREF colors[]={RGB(65,220,184),RGB(255,189,89),RGB(156,145,255)};
+    for (const auto& s:lab.strokes) { auto stroke=CreatePen(PS_SOLID,2,colors[s.color%3]); SelectObject(dc,stroke); MoveToEx(dc,249+int(s.x0*210),280-int(s.y0*165),nullptr); LineTo(dc,249+int(s.x1*210),280-int(s.y1*165)); SelectObject(dc,pen); DeleteObject(stroke); }
+    for (const auto& m:lab.marks) { int mx=249+int(m.x*210),my=280-int(m.y*165); Rectangle(dc,mx-4,my-4,mx+4,my+4); }
     const int x=249+int(lab.x*210),y=280-int(lab.y*165);
     HBRUSH cursor=CreateSolidBrush(RGB(65,220,184)); auto oldBrush=SelectObject(dc,cursor); Ellipse(dc,x-10,y-10,x+10,y+10);
     SelectObject(dc,oldBrush); DeleteObject(cursor); SelectObject(dc,oldPen); DeleteObject(pen);
     char value[160]; std::snprintf(value,sizeof(value),"BEACONS  %u    PULSES  %u",lab.fires,lab.pulses); text(510,115,value);
     std::snprintf(value,sizeof(value),"MODE  %u   BRAKES  %u",lab.mode+1,lab.brakes); text(510,150,value);
     std::snprintf(value,sizeof(value),"POSITION  %+.2f / %+.2f",lab.x,lab.y); text(510,185,value);
-    text(510,240,"ARROWS  drive rover"); text(510,270,"SPACE   launch beacon"); text(510,300,"ENTER   pulse");
-    text(510,330,"SHIFT   precision"); text(510,360,"W / S   throttle"); text(510,390,"B       brake"); text(510,420,"1 2 3   select mode");
+    text(510,240,"ARROWS  move pen"); text(510,270,"SPACE   stamp marker"); text(510,300,"ENTER   export SVG");
+    text(510,330,"SHIFT   pen down / precision"); text(510,360,"W / S   throttle"); text(510,390,"B       brake"); text(510,420,"1 2 3   ink color");
+    text(24,470,lab.exportPath.c_str());
     text(24,495,"Keep DOOM focused. Focus loss releases controls and disarms output.");
     SelectObject(dc,old); DeleteObject(font);
 }
@@ -105,7 +134,18 @@ xcb_keysym_t symbols[cdr::KeyCount]={0xff51,0xff53,0xff52,0xff54,0x20,0xff0d,0xf
 }
 int main(int argc,char** argv)
 {
-    for (int i=1;i+1<argc;++i) if (std::string(argv[i])=="--report") lab.report=argv[++i];
+#ifdef _WIN32
+    const char* data=std::getenv("LOCALAPPDATA");
+#else
+    const char* data=std::getenv("XDG_DATA_HOME");
+    if (!data || !*data) data=std::getenv("HOME");
+#endif
+    if (data && *data) lab.exportPath=(std::filesystem::path(data)/"can-doom-run-it"/"sketch.svg").string();
+    for (int i=1;i+1<argc;++i)
+    {
+        if (std::string(argv[i])=="--report") lab.report=argv[++i];
+        else if (std::string(argv[i])=="--export") lab.exportPath=argv[++i];
+    }
     lab.Save();
 #ifdef _WIN32
     WNDCLASSA cls{}; cls.lpfnWndProc=WindowProc; cls.hInstance=GetModuleHandleA(nullptr); cls.lpszClassName="DoomIOInputLab"; cls.hCursor=LoadCursor(nullptr,IDC_ARROW);
@@ -157,7 +197,7 @@ int main(int argc,char** argv)
         if (frame++%3==0)
         {
             xcb_clear_area(connection,0,window,0,0,0,0);
-            text(24,30,"DOOM I/O | INPUT LAB"); text(24,55,"Independent desktop rover - routed keyboard input");
+            text(24,30,"DOOM I/O | INPUT LAB / SKETCHPAD"); text(24,55,"Independent keyboard application - draw and export SVG");
             unsigned color=0x253e48; xcb_change_gc(connection,gc,XCB_GC_FOREGROUND,&color);
             for (int i=0;i<=10;++i)
             {
@@ -165,12 +205,17 @@ int main(int argc,char** argv)
                 xcb_point_t row[]={{24,std::int16_t(100+i*36)},{474,std::int16_t(100+i*36)}}; xcb_poly_line(connection,XCB_COORD_MODE_ORIGIN,window,gc,2,row);
             }
             color=0x41dcb8; xcb_change_gc(connection,gc,XCB_GC_FOREGROUND,&color);
+            const unsigned colors[]={0x41dcb8,0xffbd59,0x9c91ff};
+            for (const auto& s:lab.strokes) { color=colors[s.color%3]; xcb_change_gc(connection,gc,XCB_GC_FOREGROUND,&color); xcb_point_t path[]={{std::int16_t(249+s.x0*210),std::int16_t(280-s.y0*165)},{std::int16_t(249+s.x1*210),std::int16_t(280-s.y1*165)}}; xcb_poly_line(connection,XCB_COORD_MODE_ORIGIN,window,gc,2,path); }
+            color=0x41dcb8; xcb_change_gc(connection,gc,XCB_GC_FOREGROUND,&color);
+            for (const auto& m:lab.marks) { xcb_rectangle_t stamp{std::int16_t(245+m.x*210),std::int16_t(276-m.y*165),8,8}; xcb_poly_rectangle(connection,window,gc,1,&stamp); }
             xcb_rectangle_t rover{std::int16_t(240+lab.x*210),std::int16_t(271-lab.y*165),18,18}; xcb_poly_fill_rectangle(connection,window,gc,1,&rover);
             char value[128]; std::snprintf(value,sizeof(value),"BEACONS %u   PULSES %u",lab.fires,lab.pulses); text(510,120,value);
             std::snprintf(value,sizeof(value),"MODE %u   BRAKES %u",lab.mode+1,lab.brakes); text(510,155,value);
             std::snprintf(value,sizeof(value),"POSITION %+.2f / %+.2f",lab.x,lab.y); text(510,190,value);
-            text(510,245,"ARROWS  drive rover"); text(510,275,"SPACE   launch beacon"); text(510,305,"ENTER   pulse");
-            text(510,335,"SHIFT   precision"); text(510,365,"W / S   throttle"); text(510,395,"B       brake"); text(510,425,"1 2 3   select mode");
+            text(510,245,"ARROWS  move pen"); text(510,275,"SPACE   stamp marker"); text(510,305,"ENTER   export SVG");
+            text(510,335,"SHIFT   pen down / precision"); text(510,365,"W / S   throttle"); text(510,395,"B       brake"); text(510,425,"1 2 3   ink color");
+            text(24,480,lab.exportPath.c_str());
             text(24,510,"Keep DOOM focused. Focus loss releases controls and disarms output.");
             xcb_flush(connection); lab.Save();
         }

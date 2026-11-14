@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install --no-install-recommends -y \
     build-essential ca-certificates git python3 python3-venv pkg-config \
     libsdl2-dev libvpx-dev libbz2-dev libgl-dev libx11-dev libxcursor-dev \
-    libasound2-dev xvfb xauth freedoom \
+    libasound2-dev libxcb1-dev xvfb xauth freedoom \
     && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/build-tools \
     && /opt/build-tools/bin/pip install --no-cache-dir cmake==3.31.10 ninja==1.13.0

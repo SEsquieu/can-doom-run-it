@@ -81,6 +81,7 @@ public:
     void Snapshot(std::uint64_t tick);
     void Tick(std::uint64_t tick);
     void Reset(ResetReason reason, std::uint64_t tick);
+    void BeginMap(std::uint64_t tick);
     void SetEnabled(bool enabled, std::uint64_t tick);
     void SetFocused(bool focused, std::uint64_t tick);
     // Map bindings cannot grant capabilities. Physical grants are rejected;

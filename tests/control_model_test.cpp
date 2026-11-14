@@ -77,5 +77,7 @@ int main()
     Bus bounded;
     for (unsigned i=1;i<MaxControls;++i) CHECK(bounded.Define({"c."+std::to_string(i),"Control","",Primitive::Toggle}));
     CHECK(!bounded.Define({"overflow","Overflow","",Primitive::Toggle}));
+    bounded.BeginMap(40); CHECK(bounded.Count()==1); CHECK(bounded.Find("player.use")==0);
+    CHECK(bounded.Find("c.1")==-1); CHECK(bounded.Define({"c.1","Fresh map","",Primitive::Scalar}));
     std::puts("PASS: all six primitives, metadata, leases, snapshots, sessions, permissions, lifecycle, bounds");
 }

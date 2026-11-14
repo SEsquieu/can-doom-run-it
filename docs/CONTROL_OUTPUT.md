@@ -5,7 +5,7 @@ event to **UDP 127.0.0.1:19793**. Holding Use emits once until release/repress.
 Normal door/switch/conversation handling continues. `player.use` means the
 player attempted Use; it does not claim a door or switch successfully activated.
 
-## Try it
+## Optional developer receiver
 
 Build the application using [BUILDING.md](BUILDING.md). In one terminal:
 
@@ -79,10 +79,12 @@ milestone. Diagnostic/loopback adapters never confer OS-input permissions.
 ## Behavior and boundaries
 
 - The hook is in `P_CheckUse`, directly in native gameplay code. The bus and
-  adapter live in `src/cdr/` and do not depend on the engine's script VM.
+  adapters live in `src/cdr/`; reusable instruments enter through a narrow native
+  ZScript binding, while ordinary player Use retains its native gameplay hook.
 - The bus serializes into a fixed 1536-byte stack buffer. The adapter sends one
   bounded datagram using a nonblocking socket and has no retry queue or waits.
-  It only addresses IPv4 loopback; nothing listens inside the engine.
+  It only addresses IPv4 loopback. A second nonblocking loopback socket accepts
+  the read-only snapshot request described above; it cannot publish or arm outputs.
 - No receiver is required to launch or play. UDP submission is best effort;
   successful `sendto` means the OS accepted bytes, not that anyone received them.
 - `cdr_io_status` in the game console shows availability and emitted/submitted/
@@ -91,10 +93,40 @@ milestone. Diagnostic/loopback adapters never confer OS-input permissions.
 - Remote players, network games, and demo playback do not emit. These policies
   must be revisited explicitly before multiplayer/device authority is enabled.
 
-This proves an observable engine-to-software path. Physical hardware adapters,
-discovery, a built-in visual endpoint, and the packaged first-run playground
-remain future work. Future physical outputs need explicit pairing/authority and
-state/disconnect handling; a generic UDP listener is not a hardware adapter.
+HELIX's native diagnostic adapter consumes all six types and displays state in
+the room. The software-keyboard adapter consumes the same messages on a bounded
+worker queue, with explicit native authorization and platform endpoint classes.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the boundary and [PLAYING.md](PLAYING.md)
+for its useful external SVG drawing application and current compatibility limits.
+Physical hardware, generic discovery, virtual HID and arbitrary-window pairing
+remain future work; loopback subscription does not grant actuation permission.
+
+## Native virtual instrument API
+
+`wadsrc/static/zscript/cdr_api.zs` declares the versioned engine-side surface:
+
+```c
+DoomIO.Define("my.slider", "MY SLIDER", DoomIO.CT_Scalar,
+              0, 1, 0.5, 0, "normalized", 0, 14);
+DoomIO.Publish(localPawn, "my.slider", 0.75);
+```
+
+`Define(id,label,type,min,max,neutralX,neutralY,units,optionCount,staleTicks)`
+registers bounded metadata, not a device address. Types are `CT_Trigger`,
+`CT_Button`, `CT_Toggle`, `CT_Scalar`, `CT_Vector2`, `CT_Selector`. Continuous
+updates refresh the lease without emitting unchanged values. `ValueX/ValueY`,
+`Count/ControlId`, `DiagnosticLine`, `Status` and endpoint/profile readonly
+accessors support instrument feedback. `Publish` requires a live local pawn;
+invalid, disabled, unfocused, replay and multiplayer publications are rejected.
+`SelectProfile` chooses a built-in profile but cannot grant authority. Only native
+F7 or the trusted developer `cdr_arm` command can authorize software keyboard
+output. `cdr_open_lab` is also a trusted developer command, not a VM method.
+
+HELIX stores IDs in each UDMF thing's `user_control` string. Its actors do not
+contain OS keys or profile IDs. The native keyboard mapping profile requires
+seven typed controls and three selector states; missing/incompatible definitions
+prevent arming. Neutral/range metadata controls keyboard dead-zone normalization.
+A future adapter can implement a different profile without changing instruments.
 
 ## Automated verification
 
@@ -116,3 +148,12 @@ Repeat the engine test with `--disable-output` to expect zero emissions and
 build/smoke/live/control-demo.lmp` with a live test, then `--play-demo` with that
 path to check replay suppression. Logs are separated by test mode under
 `build/smoke/`; none are source-controlled.
+
+For the bundled playable instruments, run `smoke-engine.py --room --controls`.
+Add `--external` to launch the separate desktop application, route gameplay to
+actual Win32/XCB keyboard events, check canvas movement/held-state cleanup, and
+parse its exported SVG strokes and markers. These test actions use real hitscan,
+Use and player positioning; no test-only Publish shortcut exists. The scripts
+save all definitions, snapshots, events, process logs and external output under
+`build/smoke/`. The optional observer accepts schema 1 bootstrap events for
+inspection; new consumers should implement schema 2 sessions and resynchronization.

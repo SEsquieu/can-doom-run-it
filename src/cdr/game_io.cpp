@@ -3,6 +3,7 @@
 #include "control_bus.h"
 #include "diagnostic_adapter.h"
 #include "udp_output.h"
+#include "keyboard_adapter.h"
 #include "c_cvars.h"
 #include "c_dispatch.h"
 #include "doomstat.h"
@@ -11,17 +12,23 @@
 #include "playsim/d_player.h"
 #include "printf.h"
 #include "vm.h"
+#include "keydef.h"
+#include "cmdlib.h"
+#include "m_argv.h"
+#include <chrono>
 #include <cinttypes>
 
 CVAR(Bool, cdr_io_enabled, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, cdr_endpoint_profile, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 namespace
 {
 struct LocalOutput
 {
     cdr::LoopbackUdpOutput output{cdr::DefaultOutputPort,true};
     cdr::DiagnosticAdapter diagnostic;
+    cdr::KeyboardAdapter keyboard{cdr::NativeKeyboardEndpoint()};
     cdr::Bus bus;
-    LocalOutput() { bus.Attach(diagnostic); bus.Attach(output); }
+    LocalOutput() { bus.Attach(diagnostic); bus.Attach(output); bus.Attach(keyboard); }
 };
 LocalOutput* activeOutput=nullptr;
 LocalOutput& GetLocalOutput()
@@ -33,7 +40,7 @@ LocalOutput& GetLocalOutput()
 bool LiveOperator(const AActor* actor)
 {
     return actor && actor==players[consoleplayer].mo && actor->player==&players[consoleplayer] &&
-        !demoplayback && !netgame && gamestate==GS_LEVEL && cdr_io_enabled;
+        !demoplayback && !netgame && !multiplayer && gamestate==GS_LEVEL && cdr_io_enabled;
 }
 }
 void cdr::PublishPlayerUse(const player_t* player)
@@ -46,6 +53,8 @@ void cdr::UpdateRuntime(bool focused,bool live,std::uint64_t tick)
     auto& state=GetLocalOutput();
     state.bus.SetEnabled(cdr_io_enabled,tick);
     state.bus.SetFocused(focused && live,tick);
+    if ((state.bus.Grants() & SoftwareKeyboard) && (!state.keyboard.IsReady() || cdr_endpoint_profile!=1))
+        state.bus.Grant(SoftwareKeyboard,false,tick);
     state.bus.Tick(tick);
     if (state.output.TakeSnapshotRequest()) state.bus.Snapshot(tick);
 }
@@ -53,6 +62,54 @@ void cdr::ShutdownRuntime()
 {
     if (activeOutput) { activeOutput->bus.Reset(ResetReason::Shutdown,std::uint64_t(gametic)); activeOutput->bus.SetEnabled(false,std::uint64_t(gametic)); }
 }
+void cdr::BeginMap() { GetLocalOutput().bus.BeginMap(std::uint64_t(gametic)); }
+void cdr::ConfigureFirstRun(FArgs* args)
+{
+    if (args->CheckParm("-iwad") || args->CheckParm("-file") || args->CheckParm("-playdemo") || args->CheckParm("-timedemo")) return;
+    FString assets=NicePath("$PROGDIR/freedoom2.wad");
+    FString room=NicePath("$PROGDIR/doom-io.pk3");
+    if (!FileExists(assets.GetChars()) || !FileExists(room.GetChars())) return;
+    args->AppendArg("-iwad"); args->AppendArg(assets.GetChars());
+    args->AppendArg("-file"); args->AppendArg(room.GetChars());
+    if (!args->CheckParm("+map") && !args->CheckParm("-warp")) { args->AppendArg("+map"); args->AppendArg("DIO01"); }
+    args->AppendArg("-noautoload");
+    if (!args->CheckParm("+screenblocks")) { args->AppendArg("+screenblocks"); args->AppendArg("12"); }
+    if (!args->CheckParm("+crosshair")) { args->AppendArg("+crosshair"); args->AppendArg("1"); }
+}
+namespace
+{
+bool OpenLab()
+{
+    auto& state=GetLocalOutput(); cdr_endpoint_profile=1;
+    if (state.keyboard.Available()) return true;
+    static auto last=std::chrono::steady_clock::time_point::min();
+    const auto now=std::chrono::steady_clock::now();
+    if (last!=std::chrono::steady_clock::time_point::min() && now-last<std::chrono::seconds(2)) return false;
+    last=now;
+#ifdef _WIN32
+    FString executable=NicePath("$PROGDIR/doom-io-input-lab.exe");
+#else
+    FString executable=NicePath("$PROGDIR/doom-io-input-lab");
+#endif
+    return cdr::LaunchInputLab(executable.GetChars());
+}
+bool ToggleArm()
+{
+    auto& state=GetLocalOutput();
+    if (state.bus.Grants() & cdr::SoftwareKeyboard) return state.bus.Grant(cdr::SoftwareKeyboard,false,std::uint64_t(gametic));
+    if (cdr_endpoint_profile!=1 || !cdr::KeyboardProfileCompatible(state.bus) || !state.keyboard.PrepareArm()) return false;
+    return state.bus.Grant(cdr::SoftwareKeyboard,true,std::uint64_t(gametic));
+}
+}
+bool cdr::RuntimeKey(int key)
+{
+    if (!activeOutput || activeOutput->bus.Find("vector.pad")<0 || gamestate!=GS_LEVEL) return false;
+    if (key==KEY_F6) { OpenLab(); return true; }
+    if (key==KEY_F7) { ToggleArm(); return true; }
+    return false;
+}
+UNSAFE_CCMD(cdr_open_lab) { OpenLab(); }
+UNSAFE_CCMD(cdr_arm) { Printf("Keyboard authority: %s\n",ToggleArm() ? "changed" : "unavailable (check profile, focus and endpoint)"); }
 CCMD(cdr_io_status)
 {
     const auto& state=GetLocalOutput(); const auto& c=state.bus.GetCounters();
@@ -109,5 +166,23 @@ DEFINE_ACTION_FUNCTION(_DoomIO, Status)
 {
     PARAM_PROLOGUE; auto& state=GetLocalOutput(); FString text;
     text.Format("%s | %u controls | UDP %s",state.bus.Enabled() ? "NATIVE BUS ONLINE" : "OUTPUT DISABLED",state.bus.Count(),state.output.IsReady() ? "READY" : "OFFLINE");
+    ACTION_RETURN_STRING(text);
+}
+DEFINE_ACTION_FUNCTION(_DoomIO, SelectedProfile)
+{
+    PARAM_PROLOGUE; ACTION_RETURN_INT(cdr_endpoint_profile==1 ? 1 : 0);
+}
+DEFINE_ACTION_FUNCTION(_DoomIO, SelectProfile)
+{
+    PARAM_PROLOGUE; PARAM_OBJECT(operatorActor,AActor); PARAM_INT(profile);
+    if (!LiveOperator(operatorActor) || profile<0 || profile>1) ACTION_RETURN_BOOL(false);
+    GetLocalOutput().bus.Grant(cdr::SoftwareKeyboard,false,std::uint64_t(gametic)); cdr_endpoint_profile=profile;
+    ACTION_RETURN_BOOL(true);
+}
+DEFINE_ACTION_FUNCTION(_DoomIO, EndpointStatus)
+{
+    PARAM_PROLOGUE; auto& state=GetLocalOutput(); FString text;
+    if (cdr_endpoint_profile!=1) text="PROFILE: NATIVE DIAGNOSTIC | Use endpoint station to select keyboard";
+    else text.Format("PROFILE: KEYBOARD LAB | %s | %s",state.keyboard.Status(),state.bus.Grants() & cdr::SoftwareKeyboard ? "ARMED" : "DISARMED - F7 TO AUTHORIZE");
     ACTION_RETURN_STRING(text);
 }

@@ -144,3 +144,61 @@ unit tests pass. The complete engine builds and the real player Use smoke still
 produces exactly two schema 2 events with the same session and increasing
 sequence/tick values. The script API is registered using GZDoom's native struct
 bindings, with no arbitrary I/O or permission-grant methods exposed to maps.
+
+## Phase 2 adapter checkpoint
+
+Hosted run [43548328033](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43548328033)
+at **185de2be1** succeeded on Linux and Windows. In addition to both full engine
+builds, CTest and preserved Linux gameplay tests, both runners launched a separate
+native window, routed actual OS keyboard messages, observed movement/actions in
+its report and verified held keys returned to zero. This is Windows window-message
+runtime evidence, rather than an inference from compilation. It does not test the
+later HELIX content or Windows GZDoom interactive graphics.
+
+## Phase 2 playable local checkpoint
+
+On the same Debian host, the full engine rebuilt with the typed native runtime,
+VM bindings, keyboard adapter and first-run startup hook. Three native CTests
+and six Python tests pass. Native lifecycle tests exercise press/hold/release,
+snapshot reconciliation without trigger replay, focus reset, a stalled heartbeat,
+bounded queue overflow, endpoint failure and deterministic worker shutdown.
+Content tests reject unplayable sector heights and missing stable instrument IDs.
+
+Real GLES/software-rendered gameplay under Xvfb passed these additional cases:
+
+- Bundled first-run path: no `-iwad`, `-file` or `-warp`; DIO01 loads and all eight
+  definitions (including existing player.use) register. The test seeds isolated
+  renderer/configuration settings and a timed exit; it is not a hands-on launch.
+- Actual hitscan shots press pulse and both momentary buttons. Both buttons
+  produce exactly one press and one release, separated by the held interval.
+- Real Use activates latch and selector. Holding Use and looking up drives the
+  analog scalar from 0.5 through intermediate values to 1; release restores 0.5.
+- Walking/warping onto the XY region produces `[0.5,0.5]`; leaving restores `[0,0]`.
+  Test positioning uses the engine's ordinary warp command; interactions use
+  ordinary attack, Use, look and movement inputs, never direct native Publish.
+- The gameplay-to-OS-to-sketchpad test produces markers and line strokes in an
+  actual external SVG drawing. The independent process reports held=0, fires=1,
+  pulses=2, brakes=1, mode=0, positive X/Y movement and nonempty strokes. The SVG
+  is parsed independently for path and circle elements. Native diagnostic and
+  loopback adapters simultaneously consume the same generic stream.
+- Recording live room play, then replaying it: no external event publications.
+  Output-disabled and one-player multiplayer-host cases likewise emit no events.
+- Real engine screenshots reviewed for room geometry, signs, panel state and HUD.
+  This caught incorrect UDMF height property names and bench-relative spawn Z;
+  both were corrected. Graphical inspection verifies rendered content, not a claim
+  of polished hands-on usability. The compact room requires user playtesting.
+- Linux staging includes verified Freedoom, original content, separate native
+  application, engine resources, ZMusic and component notices. No downloaded
+  IWAD, generated PK3, screenshot, build directory or binary is source-controlled.
+
+Generated evidence is under `build/smoke/`, `build/screenshots/` and
+`build/keyboard-endpoint.{json,svg}`. Hosted CI repeats these checks and uploads
+logs, drawings and screenshots; its exact final run is recorded after completion.
+The original player Use positive/disabled/receiver-absent/replay cases remain in CI.
+
+Windows interactive GZDoom rendering, hands-on room usability, audible feedback,
+signed installation and arbitrary third-party target compatibility have not been
+verified here. Windows classic window-message routing is tested in a real separate
+process. Native Wayland, Raw Input/HID, hardware actuation, automatic permissions,
+and general endpoint discovery are intentionally not implemented. The shipped
+software endpoint needs no driver; all physical-device authority remains denied.

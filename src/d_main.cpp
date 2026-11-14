@@ -1227,7 +1227,7 @@ void D_DoomLoop ()
 
 			// process one or more tics
 			cdr::UpdateRuntime(AppActive && !paused && !pauseext && menuactive == MENU_Off,
-				gamestate == GS_LEVEL && !demoplayback && !netgame, std::uint64_t(gametic));
+				gamestate == GS_LEVEL && !demoplayback && !netgame && !multiplayer, std::uint64_t(gametic));
 			if (singletics)
 			{
 				I_StartTic ();
@@ -2696,6 +2696,7 @@ bool System_WantLeftButton()
 
 static bool System_DispatchEvent(event_t* ev)
 {
+	if (ev->type == EV_KeyDown && cdr::RuntimeKey(ev->data1)) return true;
 	shiftState.AddEvent(ev);
 
 	if (ev->type == EV_Mouse && menuactive == MENU_Off && ConsoleState != c_down && ConsoleState != c_falling && !primaryLevel->localEventManager->Responder(ev) && !paused)
@@ -3657,6 +3658,7 @@ static int D_DoomMain_Internal (void)
 	std::set_new_handler(NewFailure);
 	const char *batchout = Args->CheckValue("-errorlog");
 
+	cdr::ConfigureFirstRun(Args);
 	D_DoomInit();
 	
 	// [RH] Make sure zdoom.pk3 is always loaded,

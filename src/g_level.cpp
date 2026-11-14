@@ -36,6 +36,7 @@
 
 #include "d_main.h"
 #include "g_level.h"
+#include "cdr/game_io.h"
 #include "g_game.h"
 #include "s_sound.h"
 #include "d_event.h"
@@ -1337,6 +1338,7 @@ extern gamestate_t 	wipegamestate;
  
 void G_DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame)
 {
+	cdr::BeginMap();
 	gamestate_t oldgs = gamestate;
 
 	// Here the new level needs to be allocated.

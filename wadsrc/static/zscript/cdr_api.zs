@@ -12,4 +12,7 @@ struct DoomIO native
     native static int Count();
     native static String DiagnosticLine(int slot);
     native static String Status();
+    native static int SelectedProfile();
+    native static play bool SelectProfile(Actor operatorActor, int profile);
+    native static String EndpointStatus();
 }

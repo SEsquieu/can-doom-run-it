@@ -17,9 +17,11 @@ int main()
     bus.Define({"vector.pad","Pad","",Primitive::Vector2,-1,1});
     bus.Define({"selector.mode","Mode","",Primitive::Selector,0,2,{},3});
     bus.Attach(keyboard); bus.Grant(SoftwareKeyboard,true,0);
-    bus.Publish("trigger.pulse",{},1); bus.Publish("button.a",{1,0},1);
+    bus.Publish("button.a",{1,0},1); bus.Publish("toggle.power",{1,0},1);
     bus.Publish("vector.pad",{1,1},1); bus.Publish("selector.mode",{2,0},1);
     for (unsigned i=0;i<15;++i) { keyboard.Tick(i); std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+    bus.Publish("trigger.pulse",{},16);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
     bus.Reset(ResetReason::Shutdown,16); keyboard.Stop();
     return 0;
 }

@@ -193,6 +193,12 @@ void Bus::Reset(ResetReason reason,std::uint64_t tick)
     Message m; m.kind=Kind::Lifecycle; m.tick=tick; m.reason=Name(reason); Emit(m,nullptr);
 }
 void Bus::SetEnabled(bool enabled,std::uint64_t tick) { if (enabled_==enabled) return; if (!enabled) Reset(ResetReason::Disabled,tick); enabled_=enabled; if (enabled) Snapshot(tick); }
+void Bus::BeginMap(std::uint64_t tick)
+{
+    Reset(ResetReason::MapChange,tick);
+    for (unsigned i=1;i<count_;++i) { definitions_[i]={}; states_[i]={}; }
+    count_=1; states_[0]={}; Snapshot(tick);
+}
 void Bus::SetFocused(bool focused,std::uint64_t tick) { if (focused_==focused) return; if (!focused) { Reset(ResetReason::FocusLost,tick); Grant(SoftwareKeyboard,false,tick); } focused_=focused; }
 bool Bus::Grant(unsigned capability,bool granted,std::uint64_t tick)
 {

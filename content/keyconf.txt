@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+addkeysection "DOOM I/O" DoomIO
+defaultbind e "+use"
+defaultbind w "+forward"
+defaultbind s "+back"
+defaultbind a "+moveleft"
+defaultbind d "+moveright"
+defaultbind mouse1 "+attack"

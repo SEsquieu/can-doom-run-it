@@ -2,7 +2,7 @@
   "name": "Can DOOM Run It? (Linux)",
   "build": { "dockerfile": "Dockerfile" },
   "remoteUser": "ubuntu",
-  "postCreateCommand": "python3 scripts/build-zmusic.py && cmake --preset linux",
+  "postCreateCommand": "python3 scripts/build-zmusic.py && python3 scripts/fetch-free-assets.py && cmake --preset linux",
   "customizations": {
     "vscode": {
       "extensions": ["ms-vscode.cpptools", "ms-vscode.cmake-tools"]

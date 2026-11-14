@@ -10,6 +10,7 @@ import os
 import socket
 import signal
 import time
+import xml.etree.ElementTree as ET
 from control_protocol import ControlState, MAX_DATAGRAM
 from pathlib import Path
 import subprocess
@@ -20,9 +21,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--engine", type=Path, default=ROOT / "build/linux/can-doom-run-it")
-    parser.add_argument("--iwad", type=Path, required=True)
+    parser.add_argument("--iwad", type=Path)
+    parser.add_argument("--room", action="store_true", help="Test bundled first-run content without IWAD/map arguments")
+    parser.add_argument("--external", action="store_true", help="With --room --controls, verify actions in the independent native input lab")
+    parser.add_argument("--screenshot", type=Path)
+    parser.add_argument("--view", choices=["entry","monitor","buttons"], default="entry")
+    parser.add_argument("--multiplayer", action="store_true", help="Check authority suppression in a one-player multiplayer host")
+    parser.add_argument("--renderer", choices=[0,4], type=int, default=0)
+    parser.add_argument("--backend", choices=[0,2], type=int, default=2)
     parser.add_argument("--timeout", type=float, default=120)
-    parser.add_argument("--controls", action="store_true", help="Drive two Use presses and check native events")
+    parser.add_argument("--controls", action="store_true", help="Exercise native controls through actual gameplay")
     parser.add_argument("--disable-output", action="store_true", help="Expect no events with output disabled")
     parser.add_argument("--no-listener", action="store_true", help="Verify gameplay still exits with no receiver")
     demos = parser.add_mutually_exclusive_group()
@@ -31,12 +39,27 @@ def main():
     args = parser.parse_args()
     if (args.disable_output or args.no_listener or args.record_demo or args.play_demo) and not args.controls:
         parser.error("Output and demo options require --controls")
-    engine, iwad = args.engine.resolve(), args.iwad.resolve()
-    if not engine.is_file() or not iwad.is_file():
+    if not args.room and args.iwad is None:
+        parser.error("--iwad is required outside the bundled room")
+    if args.external and (not args.room or not args.controls or args.disable_output or args.no_listener or args.play_demo):
+        parser.error("--external requires live --room --controls")
+    if args.view!="entry" and (not args.room or args.controls):
+        parser.error("--view is for room startup screenshots")
+    engine = args.engine.resolve()
+    iwad = args.iwad.resolve() if args.iwad else None
+    if not engine.is_file() or (iwad is not None and not iwad.is_file()):
         raise SystemExit("Both the built engine and a free IWAD are required")
     mode = "startup"
     if args.controls:
         mode = "replay" if args.play_demo else "disabled" if args.disable_output else "unobserved" if args.no_listener else "live"
+    if args.room:
+        mode = "room-" + mode
+        if args.external:
+            mode += "-external"
+        if args.view!="entry":
+            mode += "-" + args.view
+    if args.multiplayer:
+        mode += "-multiplayer"
     work = ROOT / "build/smoke" / mode
     work.mkdir(parents=True, exist_ok=True)
     config = work / "startup.cfg"
@@ -47,12 +70,37 @@ def main():
     if args.controls:
         chain = ("wait 70; +use; wait 12; -use; wait 10; +use; wait 4; -use; "
                  "wait 10; cdr_io_status; quit")
+    if args.room and args.controls:
+        # Position with the engine's existing cheat command, then operate real
+        # actors through hitscan, Use and movement. Never call Publish in a test.
+        chain = ("wait 70; " + ("cdr_open_lab; wait 35; cdr_arm; wait 7; " if args.external else "") +
+                 "warp -512 348 0; wait 3; +attack; wait 6; -attack; wait 24; "
+                 "warp -384 348 0; wait 3; +attack; wait 6; -attack; wait 24; "
+                 "warp -256 348 0; wait 3; +attack; wait 6; -attack; wait 24; "
+                 "warp 256 348 0; wait 3; +use; wait 2; -use; wait 6; "
+                 "warp 512 348 0; wait 3; +use; wait 2; -use; wait 6; "
+                 "warp -628 64 0; +left; wait 28; -left; wait 3; "
+                 "+use; +lookup; wait 16; -lookup; wait 3; -use; wait 5; centerview; "
+                 "warp 80 144 -8; wait 16; warp 0 -352 0; wait 7; " +
+                 ("warp -512 348 0; +right; wait 28; -right; wait 3; +attack; wait 6; -attack; wait 24; " if args.external else "") +
+                 "cdr_io_status; quit")
     if args.play_demo:
         chain = "wait 100; cdr_io_status; quit"
+    if args.room and not args.controls:
+        chain = chain.replace("quit", "cdr_io_status; quit")
+        if args.view=="monitor":
+            chain=chain.replace("cdr_io_status; quit","warp 620 64 0; +right; wait 28; -right; wait 5; cdr_io_status; quit")
+        elif args.view=="buttons":
+            chain=chain.replace("cdr_io_status; quit","warp -384 292 0; wait 5; cdr_io_status; quit")
+    if args.screenshot:
+        args.screenshot.resolve().parent.mkdir(parents=True, exist_ok=True)
+        chain = chain.replace("cdr_io_status; ", "")
+        chain = chain.replace("quit", f'screenshot "{args.screenshot.resolve().as_posix()}"; wait 2; cdr_io_status; quit')
     chain = "echo CDR_SMOKE_BEGIN; " + chain.replace("quit", "echo CDR_SMOKE_DONE; quit")
     (work / "engine.ini").write_text(
-        "[LastRun]\nVersion=225\n[GlobalSettings]\nvid_preferbackend=2\n"
-        "vid_rendermode=0\nvid_activeinbackground=true\ni_pauseinbackground=false\n"
+        f"[LastRun]\nVersion=225\n[GlobalSettings]\nvid_preferbackend={args.backend}\n"
+        f"vid_rendermode={args.renderer}\nvid_fullscreen=false\nwin_w={1280 if args.room else 640}\nwin_h={720 if args.room else 480}\n"
+        "vid_activeinbackground=true\ni_pauseinbackground=false\n"
         "vid_lowerinbackground=false\nr_multithreaded=0\ncl_capfps=true\n"
         f"[Doom.ConsoleAliases]\nName=cdr_smoke\nCommand={chain}\n",
         encoding="utf-8",
@@ -60,16 +108,24 @@ def main():
     config.write_text("cdr_smoke\n", encoding="utf-8")
     log = work / "engine.log"
     (work / "console.log").write_text("", encoding="utf-8")
-    command = [str(engine), "-iwad", str(iwad), "-config", str(work / "engine.ini"),
-               "-noautoload", "-noautoexec", "-nosound", "-nojoy", "-warp", "1",
-               "-nomonsters", "-window", "-width", "640",
-               "-height", "480", "+vid_preferbackend", "2", "+vid_rendermode", "0",
+    command = [str(engine), "-config", str(work / "engine.ini"),
+               "-noautoload", "-noautoexec", "-nosound", "-nojoy",
+               "-nomonsters", "-window", "-width", str(1280 if args.room else 640),
+               "-height", str(720 if args.room else 480), "+vid_preferbackend", str(args.backend), "+vid_rendermode", str(args.renderer),
                "+vid_activeinbackground", "1", "+i_pauseinbackground", "0",
                "+cl_capfps", "1", "+r_multithreaded", "0",
                "+logfile", str(work / "console.log"),
                "-exec", str(config)]
+    if args.room and args.play_demo:
+        command.extend(["-iwad", str(engine.parent / "freedoom2.wad"), "-file", str(engine.parent / "doom-io.pk3")])
+    elif not args.room:
+        command.extend(["-iwad", str(iwad), "-warp", "1"])
+    else:
+        command.extend(["+screenblocks", "12", "+crosshair", "1"])
     if args.controls:
         command.extend(["+cdr_io_enabled", "0" if args.disable_output else "1"])
+    if args.multiplayer:
+        command.extend(["-host","1"])
     if args.record_demo:
         command.extend(["-record", str(args.record_demo.resolve())])
     if args.play_demo:
@@ -94,7 +150,14 @@ def main():
             if record.get("kind", "event") == "event" and record.get("control") == "player.use":
                 events.append(record)
     listener = None
+    lab = None
     try:
+        if args.external:
+            report = work / "input-lab.json"
+            report.unlink(missing_ok=True)
+            export = work / "sketch.svg"
+            export.unlink(missing_ok=True)
+            lab = subprocess.Popen([str(engine.parent / ("doom-io-input-lab.exe" if os.name == "nt" else "doom-io-input-lab")), "--report", str(report), "--export", str(export)])
         if args.controls and not args.no_listener:
             listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             listener.bind(("127.0.0.1", 19793))
@@ -126,16 +189,43 @@ def main():
                     process.wait()
                 raise SystemExit(f"{exc}; inspect {log} and {work / 'console.log'}") from exc
         drain()
+        if args.external:
+            deadline=time.monotonic()+3
+            observed=None
+            while time.monotonic()<deadline:
+                try:
+                    observed=json.loads(report.read_text())
+                    if observed["held"]==0 and observed["fires"]>=1 and observed["pulses"]>=2 and observed["brakes"]>=1 and observed["x"]>0 and observed["y"]>0 and observed["mode"]==0:
+                        break
+                except (FileNotFoundError,json.JSONDecodeError):
+                    pass
+                time.sleep(0.02)
+            else:
+                raise SystemExit(f"Gameplay did not drive and neutralize the independent OS endpoint: {observed}")
+            print(f"PASS: gameplay drove external OS window: {observed}")
+            drawing=ET.parse(export).getroot()
+            if not drawing.findall('{http://www.w3.org/2000/svg}path') or not drawing.findall('{http://www.w3.org/2000/svg}circle'):
+                raise SystemExit("Gameplay did not produce strokes and markers in the external application's SVG export")
+            print(f"PASS: gameplay produced a usable external SVG drawing: {export}")
     finally:
         if listener is not None:
             listener.close()
+        if lab is not None:
+            lab.terminate()
+            try: lab.wait(timeout=3)
+            except subprocess.TimeoutExpired: lab.kill(); lab.wait()
     text = log.read_text(encoding="utf-8", errors="replace")
-    if result.returncode != 0 or "MAP01 - " not in text.upper():
+    if result.returncode != 0 or ("DIO01 - " if args.room else "MAP01 - ") not in text.upper():
         raise SystemExit(f"Engine failed to enter MAP01 and exit cleanly; inspect {log}\n{text[-4000:]}")
     if "CDR_SMOKE_BEGIN" not in text or "CDR_SMOKE_DONE" not in text:
         raise SystemExit(f"Timed gameplay commands did not complete; inspect {log}")
     if args.controls:
-        expected = 0 if args.disable_output or args.play_demo else 2
+        (work / "messages.jsonl").write_text("".join(json.dumps(m) + "\n" for m in messages), encoding="utf-8")
+        if args.room:
+            validate_room(args, messages, text)
+            print(f"PASS: {mode}, actual native instruments verified")
+            return
+        expected = 0 if args.disable_output or args.play_demo or args.multiplayer else 2
         if f"emitted={expected} " not in text:
             raise SystemExit(f"Unexpected native I/O counters; inspect {log}")
         if not args.no_listener:
@@ -156,7 +246,48 @@ def main():
             if events and not (events[0]["tick"] >= 0 and events[1]["tick"] > events[0]["tick"] + 10):
                 raise SystemExit(f"Use hold/release timing did not match: {events}")
         print(f"PASS: {mode}, native emitted={expected}, observed={len(events)}")
-    print(f"PASS: real engine entered MAP01 and exited cleanly. Log: {log}")
+    print(f"PASS: real engine entered {'DIO01' if args.room else 'MAP01'} and exited cleanly. Log: {log}")
+
+
+def validate_room(args, messages, text):
+    if "controls=8" not in text:
+        raise SystemExit("Room did not register its complete control set")
+    if args.no_listener:
+        return
+    events=[m for m in messages if m.get("kind")=="event"]
+    if args.disable_output or args.play_demo or args.multiplayer:
+        if events:
+            raise SystemExit(f"Unauthorized room events: {events}")
+        return
+    by_id={}
+    for m in events:
+        by_id.setdefault(m["control"],[]).append(m)
+    required={"trigger.pulse","button.a","button.b","toggle.power","scalar.throttle","vector.pad","selector.mode"}
+    missing=required-set(by_id)
+    if missing:
+        raise SystemExit(f"Gameplay did not reach instruments {missing}; observed {by_id}")
+    sessions={m.get("session") for m in messages}
+    if len(sessions)!=1 or not next(iter(sessions)):
+        raise SystemExit("Invalid process session boundary")
+    if any(m.get("schema")!=2 for m in messages) or any(a["sequence"]>=b["sequence"] for a,b in zip(messages,messages[1:])):
+        raise SystemExit("Invalid message schema or sequence ordering")
+    for identifier in ("button.a","button.b"):
+        phases=[m["phase"] for m in by_id[identifier]]
+        if phases!=["press","release"]:
+            raise SystemExit(f"Invalid momentary button transition: {identifier}: {phases}")
+    for identifier,neutral in (("scalar.throttle",0.5),("vector.pad",0)):
+        values=[m["value"][0] for m in by_id[identifier]]
+        if max(values)<=neutral+0.1 or values[-1]!=neutral:
+            raise SystemExit(f"Continuous control failed range/neutral check: {identifier}: {values}")
+    if not any(m["value"][1]>0.1 for m in by_id["vector.pad"]):
+        raise SystemExit("XY surface did not publish its second axis")
+    if by_id["toggle.power"][0]["value"]!=[1,0] or by_id["selector.mode"][0]["value"]!=[1,0]:
+        raise SystemExit("Use instruments did not change their persistent state")
+    tracker=ControlState()
+    for message in messages:
+        tracker.accept(message)
+    if len(tracker.definitions)!=8:
+        raise SystemExit("Missing complete native state snapshot")
 
 
 if __name__ == "__main__":
