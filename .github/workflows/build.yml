@@ -38,7 +38,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y build-essential pkg-config \
             libsdl2-dev libvpx-dev libbz2-dev libgl-dev libx11-dev libxcursor-dev \
-            libasound2-dev xvfb xauth freedoom
+            libasound2-dev libxcb1-dev xvfb xauth freedoom
       - name: Build pinned ZMusic
         run: python scripts/build-zmusic.py
       - name: Configure
@@ -49,6 +49,12 @@ jobs:
         run: ctest --test-dir build/${{ matrix.preset }} -C Release --output-on-failure
       - name: Test protocol consumer
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Test actual Linux keyboard endpoint
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python scripts/test-keyboard-endpoint.py --preset linux
+      - name: Test actual Windows keyboard endpoint
+        if: runner.os == 'Windows'
+        run: python scripts/test-keyboard-endpoint.py --preset windows
       - name: Run Linux engine smoke test
         if: runner.os == 'Linux'
         env:
