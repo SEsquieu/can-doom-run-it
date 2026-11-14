@@ -43,6 +43,10 @@ class ControlState:
         elif kind == 'definition':
             control = message['control']
             if self._pending is not None:
+                if message.get('snapshot')!=self._pending['id']:
+                    self._pending=None
+                    self.synchronized=False
+                    return False
                 if control not in self._pending['definitions'] and len(self._pending['definitions']) >= self._pending['count']:
                     raise ValueError('Snapshot exceeds declared control count')
                 self._pending['definitions'][control] = message
@@ -56,14 +60,25 @@ class ControlState:
             if not isinstance(value, list) or len(value) != 2 or not all(type(v) in (int, float) and math.isfinite(v) for v in value):
                 raise ValueError('Invalid control value')
             if kind == 'state' and self._pending is not None:
+                if message.get('snapshot')!=self._pending['id']:
+                    self._pending=None
+                    self.synchronized=False
+                    return False
                 if message['control'] not in self._pending['values'] and len(self._pending['values']) >= self._pending['count']:
                     raise ValueError('Snapshot state exceeds declared count')
                 self._pending['values'][message['control']] = value
             elif kind == 'event' and self.synchronized:
-                self.values[message['control']] = value
+                control=message['control']
+                if control not in self.definitions:
+                    self.synchronized=False
+                    return False
+                # A trigger is an instantaneous action, never latched state.
+                if self.definitions[control].get('type')!='trigger':
+                    self.values[control] = value
         elif kind == 'snapshot_end':
             p = self._pending
             if (p is not None and p['id'] == message.get('snapshot') and
+                p['count'] == message.get('control_count') and
                 len(p['definitions']) == p['count'] and p['definitions'].keys() == p['values'].keys()):
                 self.definitions, self.values = p['definitions'], p['values']
                 self.synchronized = True

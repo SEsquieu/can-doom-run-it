@@ -96,6 +96,9 @@ def main():
         args.screenshot.resolve().parent.mkdir(parents=True, exist_ok=True)
         chain = chain.replace("cdr_io_status; ", "")
         chain = chain.replace("quit", f'screenshot "{args.screenshot.resolve().as_posix()}"; wait 2; cdr_io_status; quit')
+    if args.external:
+        blur="echo CDR_BLUR_REQUEST; wait 21; " if os.name=="posix" else ""
+        chain=chain.replace("quit", blur+"menu_main; wait 10; echo CDR_MENU_CLEANUP; cdr_io_status; quit")
     chain = "echo CDR_SMOKE_BEGIN; " + chain.replace("quit", "echo CDR_SMOKE_DONE; quit")
     (work / "engine.ini").write_text(
         f"[LastRun]\nVersion=225\n[GlobalSettings]\nvid_preferbackend={args.backend}\n"
@@ -150,14 +153,16 @@ def main():
             if record.get("kind", "event") == "event" and record.get("control") == "player.use":
                 events.append(record)
     listener = None
-    lab = None
+    process = None
     try:
         if args.external:
             report = work / "input-lab.json"
             report.unlink(missing_ok=True)
             export = work / "sketch.svg"
             export.unlink(missing_ok=True)
-            lab = subprocess.Popen([str(engine.parent / ("doom-io-input-lab.exe" if os.name == "nt" else "doom-io-input-lab")), "--report", str(report), "--export", str(export)])
+            # Exercise the application's native launch path rather than starting
+            # its endpoint for it. Only the trusted environment selects test files.
+            environment.update(CDR_LAB_REPORT=str(report),CDR_LAB_EXPORT=str(export))
         if args.controls and not args.no_listener:
             listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             listener.bind(("127.0.0.1", 19793))
@@ -168,6 +173,7 @@ def main():
                 process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
                                            cwd=work, env=environment, start_new_session=os.name == "posix")
                 deadline = time.monotonic() + args.timeout
+                blurred=False
                 while process.poll() is None:
                     console = work / "console.log"
                     diagnostic = console.read_text(errors="replace") if console.exists() else ""
@@ -175,6 +181,9 @@ def main():
                         raise RuntimeError("Startup alias was not registered before exec; this is a fixture failure")
                     if "Script error," in diagnostic or "Execution could not continue" in diagnostic:
                         raise RuntimeError("Engine script initialization failed")
+                    if args.external and os.name=="posix" and not blurred and "CDR_BLUR_REQUEST" in diagnostic:
+                        blur_x11_window()
+                        blurred=True
                     if time.monotonic() >= deadline:
                         raise RuntimeError("Engine smoke test timed out")
                     drain()
@@ -210,10 +219,14 @@ def main():
     finally:
         if listener is not None:
             listener.close()
-        if lab is not None:
-            lab.terminate()
-            try: lab.wait(timeout=3)
-            except subprocess.TimeoutExpired: lab.kill(); lab.wait()
+        if args.external and process is not None:
+            if os.name=="posix":
+                # Native child shares the isolated engine process group.
+                try: os.killpg(process.pid,signal.SIGTERM)
+                except ProcessLookupError: pass
+            else:
+                try: os.kill(json.loads(report.read_text())["pid"],signal.SIGTERM)
+                except (OSError,KeyError,ValueError): pass
     text = log.read_text(encoding="utf-8", errors="replace")
     if result.returncode != 0 or ("DIO01 - " if args.room else "MAP01 - ") not in text.upper():
         raise SystemExit(f"Engine failed to enter MAP01 and exit cleanly; inspect {log}\n{text[-4000:]}")
@@ -283,11 +296,39 @@ def validate_room(args, messages, text):
         raise SystemExit("XY surface did not publish its second axis")
     if by_id["toggle.power"][0]["value"]!=[1,0] or by_id["selector.mode"][0]["value"]!=[1,0]:
         raise SystemExit("Use instruments did not change their persistent state")
+    if args.external:
+        focus=[m for m in messages if m.get("kind")=="lifecycle" and m.get("reason")=="focus_lost"]
+        shutdown=[m for m in messages if m.get("kind")=="lifecycle" and m.get("reason")=="shutdown"]
+        if not focus or not shutdown or focus[-1]["sequence"]>=shutdown[0]["sequence"]:
+            raise SystemExit("Engine menu/focus cleanup did not precede shutdown")
+        if not any(m.get("reason")=="focus_lost" and m["value"]==[0,0] for m in by_id["toggle.power"]):
+            raise SystemExit("Native menu/focus loss did not neutralize the held toggle")
     tracker=ControlState()
     for message in messages:
         tracker.accept(message)
     if len(tracker.definitions)!=8:
         raise SystemExit("Missing complete native state snapshot")
+
+
+def blur_x11_window():
+    """Change actual OS focus; background rendering flags must not confer authority."""
+    import ctypes
+    x11=ctypes.CDLL("libX11.so.6")
+    x11.XOpenDisplay.argtypes=[ctypes.c_char_p]
+    x11.XOpenDisplay.restype=ctypes.c_void_p
+    x11.XDefaultRootWindow.argtypes=[ctypes.c_void_p]
+    x11.XDefaultRootWindow.restype=ctypes.c_ulong
+    x11.XSetInputFocus.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_ulong]
+    x11.XSync.argtypes=[ctypes.c_void_p,ctypes.c_int]
+    x11.XCloseDisplay.argtypes=[ctypes.c_void_p]
+    display=x11.XOpenDisplay(None)
+    if not display:
+        raise RuntimeError("Cannot open display for actual focus-loss check")
+    try:
+        x11.XSetInputFocus(display,x11.XDefaultRootWindow(display),2,0)
+        x11.XSync(display,0)
+    finally:
+        x11.XCloseDisplay(display)
 
 
 if __name__ == "__main__":

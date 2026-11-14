@@ -159,7 +159,7 @@ later HELIX content or Windows GZDoom interactive graphics.
 
 On the same Debian host, the full engine rebuilt with the typed native runtime,
 VM bindings, keyboard adapter and first-run startup hook. Three native CTests
-and six Python tests pass. Native lifecycle tests exercise press/hold/release,
+and eight Python tests pass. Native lifecycle tests exercise press/hold/release,
 snapshot reconciliation without trigger replay, focus reset, a stalled heartbeat,
 bounded queue overflow, endpoint failure and deterministic worker shutdown.
 Content tests reject unplayable sector heights and missing stable instrument IDs.
@@ -202,3 +202,23 @@ verified here. Windows classic window-message routing is tested in a real separa
 process. Native Wayland, Raw Input/HID, hardware actuation, automatic permissions,
 and general endpoint discovery are intentionally not implemented. The shipped
 software endpoint needs no driver; all physical-device authority remains denied.
+
+The complete playable checkpoint **4810dd855** is verified by hosted run
+[43549371020](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43549371020):
+Linux and Windows both succeeded. Both built the full engine, tested lifecycle
+and real OS keyboard routing, verified external SVG output, and staged first-run
+bundles with legal assets. Linux additionally passed the preserved player Use
+suite and every room live/external/record/replay/disabled/multiplayer/screenshot
+case. Its Windows development artifact is
+[can-doom-run-it-windows](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43549371020/artifacts/14095880764).
+This checkpoint is the first hosted playable build; later verification refinements
+are recorded separately rather than attributed to this run.
+
+Subsequent local verification also launches the sketchpad through the application's
+native `cdr_open_lab` path, with no prestarted endpoint. The test changes actual X11
+window focus while the toggle is held. Native `focus_lost` neutralization and
+permission revocation occur before shutdown; the independent endpoint reports
+zero held keys and neutral selector. Snapshot-consumer tests additionally reject
+mixed snapshot IDs and unknown-control state growth, and prevent trigger events
+from becoming latched cache state. Linux child reaping is nonblocking on the
+endpoint worker. These refinements retain the already successful gameplay path.

@@ -14,6 +14,7 @@
 #include <spawn.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <cerrno>
 extern char** environ;
 #endif
 namespace cdr
@@ -58,6 +59,7 @@ bool LaunchInputLab(const std::string& executable)
     CloseHandle(process.hThread); CloseHandle(process.hProcess); return true;
 }
 #else
+namespace { std::atomic<pid_t> labChild{0}; }
 class X11Endpoint final:public KeyEndpoint
 {
     xcb_connection_t* connection_=nullptr;
@@ -124,6 +126,13 @@ public:
     }
     void Poll() noexcept override
     {
+        const auto child=labChild.load();
+        if (child>0)
+        {
+            int status=0;
+            const auto result=waitpid(child,&status,WNOHANG);
+            if (result==child || (result<0 && errno==ECHILD)) labChild.store(0);
+        }
         if (!connection_) return;
         while (auto* event=xcb_poll_for_event(connection_))
         {
@@ -136,9 +145,10 @@ public:
 std::unique_ptr<KeyEndpoint> NativeKeyboardEndpoint() { return std::make_unique<X11Endpoint>(); }
 bool LaunchInputLab(const std::string& executable)
 {
+    if (labChild.load()>0) return true;
     pid_t pid=0; char* args[]={const_cast<char*>(executable.c_str()),nullptr};
     const bool good=posix_spawn(&pid,executable.c_str(),nullptr,nullptr,args,environ)==0;
-    if (good) { /* Child has its own visible window; the engine does not wait. */ }
+    if (good) labChild.store(pid); // Nonblocking reap on the endpoint worker.
     return good;
 }
 #endif

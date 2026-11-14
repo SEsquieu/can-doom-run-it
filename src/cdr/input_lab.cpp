@@ -21,6 +21,7 @@
 #else
 #include <xcb/xcb.h>
 #include <cstdlib>
+#include <unistd.h>
 #endif
 using cdr::Key;
 namespace
@@ -80,7 +81,13 @@ struct Lab
         std::ofstream file(report,std::ios::trunc);
         file << "{\"held\":" << held << ",\"fires\":" << fires << ",\"pulses\":" << pulses
              << ",\"brakes\":" << brakes << ",\"mode\":" << mode << ",\"x\":" << x << ",\"y\":" << y
-             << ",\"strokes\":" << strokes.size() << ",\"marks\":" << marks.size() << "}\n";
+             << ",\"strokes\":" << strokes.size() << ",\"marks\":" << marks.size()
+#ifdef _WIN32
+             << ",\"pid\":" << GetCurrentProcessId()
+#else
+             << ",\"pid\":" << getpid()
+#endif
+             << "}\n";
     }
 };
 Lab lab;
@@ -141,6 +148,10 @@ int main(int argc,char** argv)
     if (!data || !*data) data=std::getenv("HOME");
 #endif
     if (data && *data) lab.exportPath=(std::filesystem::path(data)/"can-doom-run-it"/"sketch.svg").string();
+    // Trusted process environment allows test harnesses to retain independent
+    // endpoint evidence when launched by the engine. This is not a map API.
+    if (const char* report=std::getenv("CDR_LAB_REPORT")) lab.report=report;
+    if (const char* output=std::getenv("CDR_LAB_EXPORT")) lab.exportPath=output;
     for (int i=1;i+1<argc;++i)
     {
         if (std::string(argv[i])=="--report") lab.report=argv[++i];

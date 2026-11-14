@@ -57,4 +57,24 @@ class ProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError): state.accept(record(2,'event',control='x',value=[float('nan'),0]))
         with self.assertRaises(ValueError): state.accept(dict(schema=999))
 
+    def test_mixed_snapshot_ids_do_not_commit(self):
+        state=ControlState()
+        packets=snapshot()
+        packets[2]['snapshot']=9
+        for p in packets: state.accept(p)
+        self.assertFalse(state.synchronized)
+        for p in snapshot(start=5): state.accept(p)
+        self.assertTrue(state.synchronized)
+
+    def test_unknown_events_cannot_expand_state_and_triggers_do_not_latch(self):
+        state=ControlState()
+        packets=snapshot()
+        packets[1]['type']='trigger'
+        for p in packets: state.accept(p)
+        state.accept(record(5,'event',control='button.a',value=[1,0]))
+        self.assertEqual(state.values['button.a'],[0,0])
+        self.assertFalse(state.accept(record(6,'event',control='unknown',value=[1,0])))
+        self.assertNotIn('unknown',state.values)
+        self.assertFalse(state.synchronized)
+
 if __name__=='__main__': unittest.main()
