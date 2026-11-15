@@ -66,3 +66,17 @@ revision = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"]
     "Extract the entire archive, then launch can-doom-run-it. See docs/PLAYING.md.\n",
     encoding="utf-8",
 )
+if preset == "windows":
+    update = root / "build/stage/sketchpad-windows"
+    if update.exists():
+        shutil.rmtree(update)
+    update.mkdir(parents=True)
+    for file in (lab, "LICENSE", "SOURCE.txt"):
+        shutil.copy2(stage / file, update / file)
+    (update / "UPDATE.txt").write_text(
+        "Close the Input Lab / Sketchpad window.\n"
+        "Replace doom-io-input-lab.exe in your existing DOOM I/O folder with this version.\n"
+        "Return to DOOM: F6 reopens it, F7 rearms output, then enable LATCH to draw.\n"
+        "The XY pad is a velocity joystick: center or leave it to stop.\n",
+        encoding="utf-8",
+    )

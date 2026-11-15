@@ -37,11 +37,20 @@ Alt-Tab to inspect it after operating controls; switching focus disarms DOOM.
 The in-game diagnostic monitor remains visible without opening another window.
 
 - Use the latch to lower/raise the pen (Shift).
-- Walk the XY surface to move the pen (arrow keys).
+- Use the XY surface as a velocity joystick (arrow keys).
 - Hold the analog control to change movement speed (W/S).
 - Shoot momentary A to stamp a marker (Space), B to brake (B).
 - Use the selector to choose one of three inks (1/2/3).
 - Shoot pulse to export a standard SVG drawing (Enter).
+
+The current keyboard profile maps **position relative to the pad center** to
+held arrow keys. Standing still off-center keeps the pen moving. Return to the
+central dead zone (25% on each axis), leave the active region, or disarm to stop.
+Moving farther toward an edge does not increase speed in this digital keyboard
+profile; the analog station controls speed. The pen does not directly follow
+your position, and the profile does not measure changes in your position. The
+native bus still carries the full normalized XY value, so another endpoint can
+use it for absolute positioning without changing the instrument.
 
 The sketchpad shows its export path. Windows defaults to
 `%LOCALAPPDATA%/can-doom-run-it/sketch.svg`; Linux uses

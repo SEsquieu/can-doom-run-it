@@ -272,3 +272,30 @@ Linux sets the corresponding no-initial-focus hint. This preserves intentional
 user routing without hiding the external app from Alt-Tab. The default-startup
 test and all gameplay/OS tests retain logs for review; Windows interactive engine
 graphics still need hands-on testing.
+
+## Sketchpad redraw correction — 2026-11-15
+
+Hands-on Windows feedback identified visible flashing that worsened with drawing
+history. The old paint path cleared the visible window, recreated a GDI pen for
+every historical segment and replayed all ink on each timer tick. The correction
+composes complete frames offscreen, caches pens/fonts, and appends new segments
+to a retained ink surface. Cursor/markers remain separate from retained strokes;
+resize and exposure repaint from the cache. Idle timers no longer invalidate
+unchanged frames. X11 likewise presents a completed pixmap instead of clearing
+and incrementally drawing into the visible window. Windows motion now uses
+elapsed time rather than assuming every timer delivery took exactly 16 ms.
+
+The mapping contract is unchanged: native Vector2 is normalized pad position;
+the keyboard profile maps deflection beyond 25% to held arrow keys. The pen
+therefore moves at a velocity while standing off-center, and stops at the center
+or outside the active pad. It does not track position deltas or directly mirror
+absolute player position. The companion UI and play guide now state this.
+
+Local Linux keyboard-to-SVG, in-engine external-output and zero-argument launch
+checks passed after the repaint change. Windows CI additionally runs the actual
+GDI painter with 4096 segments and 1024 markers, comparing incremental/full
+raster output, cursor movement and 240 resized repaints, while checking that
+historical segments are rasterized once and GDI handle counts remain bounded.
+The test renders actual pixels; it does not replace hands-on Windows flicker
+verification. CI also publishes a small companion-only replacement ZIP so an
+existing engine installation can be updated without downloading the IWAD again.

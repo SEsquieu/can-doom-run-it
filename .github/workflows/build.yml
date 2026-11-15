@@ -63,6 +63,9 @@ jobs:
       - name: Test actual Windows keyboard endpoint
         if: runner.os == 'Windows'
         run: python scripts/test-keyboard-endpoint.py --preset windows
+      - name: Test Windows sketchpad painting with full drawing history
+        if: runner.os == 'Windows'
+        run: build/windows/Release/doom-io-input-lab.exe --test-render build/sketchpad-render.json
       - name: Run Linux engine smoke test
         if: runner.os == 'Linux'
         env:
@@ -95,6 +98,12 @@ jobs:
           path: build/stage/${{ matrix.preset }}
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: doom-io-sketchpad-update-windows
+          path: build/stage/sketchpad-windows
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-logs-${{ matrix.preset }}
@@ -103,5 +112,6 @@ jobs:
             build/screenshots/
             build/keyboard-endpoint.*
             build/audio-runtime.json
+            build/sketchpad-render.json
             build/${{ matrix.preset }}/Testing/Temporary/
           if-no-files-found: ignore
