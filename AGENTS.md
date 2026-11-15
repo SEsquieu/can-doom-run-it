@@ -21,9 +21,9 @@ upstream engine, history, licenses, rendering, and gameplay compatibility.
 ## Build and verify
 
 Linux: install the packages in `docs/BUILDING.md`, then run
-`python3 scripts/build-zmusic.py`, `cmake --preset linux`, and
-`cmake --build --preset linux`. Windows: the same dependency script with Python 3,
-then `cmake --preset windows` and `cmake --build --preset windows` in VS2022 x64.
+`python3 scripts/build-zmusic.py`, `python3 scripts/fetch-free-assets.py`, `cmake --preset linux`, and
+`cmake --build --preset linux`. Windows: the same dependency script with Python 3 plus `python scripts/build-openal.py`,
+then `python scripts/fetch-free-assets.py`, `cmake --preset windows` and `cmake --build --preset windows` in VS2022 x64.
 CI must build both complete engines. See the build guide for executable locations.
 
 For native I/O changes, test serialization, ordering, filtering, sink failures,
@@ -49,3 +49,26 @@ from a Linux-only run. Manually check first-run and normal play for UI changes.
   disconnect/stop behavior, bounded queues, and visible connection status.
 - Long-term: download, launch, enter the free built-in playground, control
   something immediately. Distinguish that target from bootstrap functionality.
+
+## Phase 2 control and content conventions
+
+- Preserve schema 2 session/sequence and snapshot transactions. Never turn a
+  trigger snapshot into an action or silently change a primitive's contract.
+- Scripts may define/publish generic controls and read diagnostics. Never add
+  arbitrary I/O, device protocols or permission grants to the VM API.
+- Every asynchronous adapter needs a bounded mailbox, visible failures, an
+  out-of-band cleanup path and stale-heartbeat neutralization. New physical
+  capabilities require independent authority design and verified safe endpoints.
+- Keep map `user_control` IDs stable; do not identify instruments by spawn order
+  or endpoint keys. Keep endpoint/profile selection outside map geometry.
+- Original HELIX source is in `content/`. Rebuild PK3s through CMake. Only use
+  `scripts/build-content.py --write-map-source` when deliberately replacing the
+  editable UDMF geometry. Sector fields are `heightfloor`/`heightceiling`.
+- Run Python tests, CTest and `smoke-engine.py --room --controls --external` for
+  instrument or routing changes. Inspect real engine screenshots for visual
+  changes. The separate keyboard endpoint test must assert observable behavior,
+  neutral state and SVG output; API success alone is insufficient.
+- Stage bundles only after fetching verified free assets. Preserve Freedoom,
+  ZMusic and engine notices, source revision, native companion and runtime files.
+  Windows compilation and window-message tests do not prove interactive GZDoom
+  rendering or arbitrary third-party application compatibility.

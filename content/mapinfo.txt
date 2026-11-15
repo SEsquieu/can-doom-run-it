@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+GameInfo
+{
+    AddEventHandlers = "DIOControlRoom"
+}
+DoomEdNums
+{
+    11010 = DIOPulse
+    11011 = DIOButton
+    11012 = DIOToggle
+    11013 = DIOAnalog
+    11014 = DIOPad
+    11015 = DIOSelector
+    11016 = DIOMonitor
+    11017 = DIOEndpointStation
+}
+map DIO01 "HELIX / CONTROL ROOM"
+{
+    levelnum = 1
+    next = "DIO01"
+    sky1 = "SKY1"
+    music = "$MUSIC_RUNNIN"
+    nointermission
+}

@@ -417,6 +417,19 @@ add_subdirectory( wadsrc_widepix )
 add_subdirectory( src/cdr )
 add_subdirectory( src )
 
+# Original application content and verified free assets; never stored in Git.
+find_package(Python3 3.8 REQUIRED COMPONENTS Interpreter)
+if(MSVC)
+	set(CDR_CONTENT_OUTPUT "${CMAKE_BINARY_DIR}/$<CONFIG>")
+else()
+	set(CDR_CONTENT_OUTPUT "${CMAKE_BINARY_DIR}")
+endif()
+add_custom_target(cdr_content ALL
+	COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/scripts/build-content.py"
+		--output "${CDR_CONTENT_OUTPUT}/doom-io.pk3"
+	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+	COMMENT "Build DOOM I/O control room")
+
 if( NOT CMAKE_CROSSCOMPILING )
 	export(TARGETS ${CROSS_EXPORTS} FILE "${CMAKE_BINARY_DIR}/ImportExecutables.cmake" )
 endif()

@@ -1,11 +1,11 @@
-# Native control-output proof of concept
+# Native control runtime and protocol
 
 In a live, single-player game, each press of **Use** emits a native `trigger`
 event to **UDP 127.0.0.1:19793**. Holding Use emits once until release/repress.
 Normal door/switch/conversation handling continues. `player.use` means the
 player attempted Use; it does not claim a door or switch successfully activated.
 
-## Try it
+## Optional developer receiver
 
 Build the application using [BUILDING.md](BUILDING.md). In one terminal:
 
@@ -25,26 +25,68 @@ prints JSON immediately. Windows uses `py -3 scripts/listen-control.py` and
 that executable first. No WAD script, broker, plugin registration, or endpoint
 configuration is required. Run only one receiver on the fixed port at a time.
 
-Example schema:
+Schema 2 event example (schema 1 was the bootstrap wire contract):
 
 ```json
-{"schema":1,"sequence":1,"type":"trigger","control":"player.use","tick":70,"player":0}
+{"schema":2,"session":"ca05219f0b0b383d","sequence":17,"tick":70,"kind":"event","snapshot":0,"control":"player.use","type":"trigger","player":0,"phase":"trigger","value":[1,0],"revision":1}
 ```
 
-`schema` versions the wire contract. `sequence` starts at 1 for the process's
-first accepted event and advances even when a send fails. `tick` is elapsed
-simulation time in the current map (35 ticks/second), not wall time, and resets
-on a new map. `player` is the local player index. There is no session identifier
-or acknowledgement; consumers must not deduplicate across process restarts by
-sequence alone. Schema 1 currently has one primitive and one control identifier.
+`schema` versions the wire contract. Schema 2 deliberately changes the bootstrap
+contract to distinguish events from state and process launches. `session` is a
+per-process opaque identifier. `sequence` advances for every message, including
+snapshots and failed submissions; it is monotonic within one session. `tick` is
+the engine simulation clock (35 ticks/second), not wall time. `revision` counts
+changes within the current map definition lifetime; map-load cleanup resets
+revisions, but preserves the process session and global message sequence. `player`
+identifies the local operator.
+
+## Typed definitions and states
+
+Every control has a stable lowercase identifier, label, primitive, units,
+minimum/maximum, two-component neutral value, update behavior, selector count,
+and optional stale timeout in simulation ticks. Registration is capped at 32
+controls. Redefinition with conflicting metadata is rejected. Values are finite;
+scalar/vector values clamp to their declared ranges, booleans require 0 or 1,
+and selectors require an integral index in range.
+
+| Primitive | Transitions | Snapshot value / safety behavior |
+| --- | --- | --- |
+| Trigger | One `trigger` event per action, value `[1,0]` | Neutral `[0,0]`; revision records pulse count. Snapshots never fire actions. |
+| Button | `press`, held lease refresh, `release` | Current 0/1 state; refreshes do not duplicate press events. |
+| Toggle | `change` | Latched 0/1 state until another change or safety reset. |
+| Scalar | `change` | Current ranged X and zero Y; declared neutral on expiry/reset. |
+| Vector2 | `change` | Current ranged X/Y; both axes return to neutral. |
+| Selector | `change` | Current zero-based discrete index. |
+
+`definition` messages carry metadata. `event` messages carry transitions.
+Snapshots are transactions: `snapshot_begin`, a definition and `state` for each
+control, then `snapshot_end`, all sharing one nonzero `snapshot` identifier.
+Clients commit snapshots only when complete and ordered; ordinary events use
+`snapshot:0`. Trigger states remain neutral and never replay one-shot actions.
+
+A new adapter receives a snapshot on attachment/authorization. UDP consumers
+bind **127.0.0.1:19793** and send the exact ASCII request **`DIO/2 SNAPSHOT`** to
+**127.0.0.1:19794**. The native socket accepts at most four requests per frame,
+rate-limits snapshots, and accepts no control writes or authority commands.
+Periodic snapshots every 35 ticks repair missed state. After a sequence gap or
+session change, discard partial snapshots and request a fresh one. The Python
+receiver maintains an atomic state cache using this contract.
+
+Focus loss, output disablement, map cleanup, and shutdown neutralize stateful
+controls and revoke software-keyboard authority. Continuous instruments and
+momentary buttons refresh their declared leases; stale values neutralize even
+if a script fails to release them. Physical-device grants are rejected in this
+milestone. Diagnostic/loopback adapters never confer OS-input permissions.
 
 ## Behavior and boundaries
 
 - The hook is in `P_CheckUse`, directly in native gameplay code. The bus and
-  adapter live in `src/cdr/` and do not depend on the engine's script VM.
-- The bus serializes into a fixed 256-byte stack buffer. The adapter sends one
+  adapters live in `src/cdr/`; reusable instruments enter through a narrow native
+  ZScript binding, while ordinary player Use retains its native gameplay hook.
+- The bus serializes into a fixed 1536-byte stack buffer. The adapter sends one
   bounded datagram using a nonblocking socket and has no retry queue or waits.
-  It only addresses IPv4 loopback; nothing listens inside the engine.
+  It only addresses IPv4 loopback. A second nonblocking loopback socket accepts
+  the read-only snapshot request described above; it cannot publish or arm outputs.
 - No receiver is required to launch or play. UDP submission is best effort;
   successful `sendto` means the OS accepted bytes, not that anyone received them.
 - `cdr_io_status` in the game console shows availability and emitted/submitted/
@@ -53,10 +95,40 @@ sequence alone. Schema 1 currently has one primitive and one control identifier.
 - Remote players, network games, and demo playback do not emit. These policies
   must be revisited explicitly before multiplayer/device authority is enabled.
 
-This proves an observable engine-to-software path. Physical hardware adapters,
-discovery, a built-in visual endpoint, and the packaged first-run playground
-remain future work. Future physical outputs need explicit pairing/authority and
-state/disconnect handling; a generic UDP listener is not a hardware adapter.
+HELIX's native diagnostic adapter consumes all six types and displays state in
+the room. The software-keyboard adapter consumes the same messages on a bounded
+worker queue, with explicit native authorization and platform endpoint classes.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the boundary and [PLAYING.md](PLAYING.md)
+for its useful external SVG drawing application and current compatibility limits.
+Physical hardware, generic discovery, virtual HID and arbitrary-window pairing
+remain future work; loopback subscription does not grant actuation permission.
+
+## Native virtual instrument API
+
+`wadsrc/static/zscript/cdr_api.zs` declares the versioned engine-side surface:
+
+```c
+DoomIO.Define("my.slider", "MY SLIDER", DoomIO.CT_Scalar,
+              0, 1, 0.5, 0, "normalized", 0, 14);
+DoomIO.Publish(localPawn, "my.slider", 0.75);
+```
+
+`Define(id,label,type,min,max,neutralX,neutralY,units,optionCount,staleTicks)`
+registers bounded metadata, not a device address. Types are `CT_Trigger`,
+`CT_Button`, `CT_Toggle`, `CT_Scalar`, `CT_Vector2`, `CT_Selector`. Continuous
+updates refresh the lease without emitting unchanged values. `ValueX/ValueY`,
+`Count/ControlId`, `DiagnosticLine`, `Status` and endpoint/profile readonly
+accessors support instrument feedback. `Publish` requires a live local pawn;
+invalid, disabled, unfocused, replay and multiplayer publications are rejected.
+`SelectProfile` chooses a built-in profile but cannot grant authority. Only native
+F7 or the trusted developer `cdr_arm` command can authorize software keyboard
+output. `cdr_open_lab` is also a trusted developer command, not a VM method.
+
+HELIX stores IDs in each UDMF thing's `user_control` string. Its actors do not
+contain OS keys or profile IDs. The native keyboard mapping profile requires
+seven typed controls and three selector states; missing/incompatible definitions
+prevent arming. Neutral/range metadata controls keyboard dead-zone normalization.
+A future adapter can implement a different profile without changing instruments.
 
 ## Automated verification
 
@@ -78,3 +150,17 @@ Repeat the engine test with `--disable-output` to expect zero emissions and
 build/smoke/live/control-demo.lmp` with a live test, then `--play-demo` with that
 path to check replay suppression. Logs are separated by test mode under
 `build/smoke/`; none are source-controlled.
+
+For the bundled playable instruments, run `smoke-engine.py --room --controls`.
+Add `--external` to launch the separate desktop application, route gameplay to
+actual Win32/XCB keyboard events, check canvas movement/held-state cleanup, and
+parse its exported SVG strokes and markers. These test actions use real hitscan,
+Use and player positioning; no test-only Publish shortcut exists. The scripts
+save all definitions, snapshots, events, process logs and external output under
+`build/smoke/`. The optional observer accepts schema 1 bootstrap events for
+inspection; new consumers should implement schema 2 sessions and resynchronization.
+
+An out-of-process actuator must implement its own bounded queue, wall-clock
+watchdog, neutralization and explicit permissions. UDP subscription is diagnostic
+access, not actuation authority, and delivery is not reliable. Never replay a
+one-shot action during resynchronization or apply an incomplete snapshot.

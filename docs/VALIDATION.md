@@ -53,7 +53,7 @@ The development IWAD was Debian's Freedoom 0.13.0-2 `freedoom2.wad`, SHA-256
 No commercial data or downloaded IWAD is tracked.
 
 Windows has a VS2022 x64 CI build definition; local Windows execution is not
-available in this Linux environment. CI results must be checked after pushing.
+available in this Linux environment. See the hosted evidence reconciliation below.
 No physical-device testing, signed installer, bundled free IWAD/playground, or
 zero-configuration device discovery is claimed by this foundation milestone.
 
@@ -90,8 +90,212 @@ ignored `build/smoke/`. See `docs/CONTROL_OUTPUT.md` for repeatable commands.
 
 The Linux/Windows workflow now builds the engine and runs native tests; Linux
 also drives the positive, disabled, receiver-absent, and replay gameplay cases.
-Remote run listings currently return no runs. The connected GitHub integration
-cannot read repository Actions settings (`403 Resource not accessible by
-integration`). The workflow is committed, but a successful hosted CI run and
-Windows execution remain **unverified**. No permission/settings changes were
-made to the GitHub repository to bypass that limitation.
+At the time of bootstrap validation, remote run listings returned no runs and
+Actions settings inspection returned 403. That observation is superseded by the
+hosted evidence below; Windows interactive execution remains unverified.
+
+## Phase 2, stage 0: hosted evidence reconciliation
+
+Inspected run [43538971197](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43538971197)
+and its uploaded `test-logs-linux` artifact (14091121986), plus job logs.
+The run tested **b2f20409e**, not the later native-output commit b3f711895.
+
+- Windows job **132274769584 succeeded**: ZMusic, complete engine build,
+  development artifact staging and upload. This verifies Windows compilation
+  and packaging at that commit, not interactive Windows runtime or Phase 2 code.
+- Linux job **132274769165 compiled successfully**. `console.log` shows working
+  llvmpipe/GLES initialization and `MAP01 - Hydroelectric Plant`. It also reports
+  **`Unknown command "cdr_smoke"`** before gameplay. The uploaded `startup.cfg`
+  defines and invokes the alias in the same startup exec file. GZDoom defers
+  alias registration until after that invocation; the unknown command never
+  schedules the timed quit. The 120-second timeout was an orchestration failure,
+  not a compilation, rendering, map-loading, or insufficient-timeout problem.
+- b3f711895 already moved the alias into the INI loaded before exec parsing.
+  Phase 2 retains that fix and adds explicit begin/completion markers, immediate
+  failure on the known missing-alias diagnostic, and process-group cleanup.
+  The gameplay test remains enabled with its original timeout.
+- The hosted version string was `<unknown version>` because origin does not
+  carry upstream tags. `git describe --always` now provides commit provenance
+  in fresh clones without requiring a mass import of upstream tags.
+
+Downloaded evidence is retained untracked under `build/ci-evidence/`. No hosted
+run results are inferred from local tests, and no repository settings changed.
+
+The stage-0 correction is now verified by hosted run
+[43542988421](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43542988421)
+at **e30ac4439**: Linux and Windows jobs both succeeded, including native tests,
+all Linux gameplay smoke cases, development staging, and artifact uploads.
+Run 43542277800 at the same commit also succeeded. This resolves the initial
+Linux timeout. It does not imply that later, unpushed Phase 2 changes were tested.
+
+## Phase 2 typed-model checkpoint
+
+The existing Bus now supports all six requested primitives, bounded typed
+metadata, schema 2 sessions/ordering, explicit transitions and transactional
+snapshots, stale leases and lifecycle neutralization. The original player Use
+hook and diagnostic receiver remain, updated intentionally for schema 2.
+
+Local checks: native serializer/UDP tests and typed-model tests pass (2/2 CTest),
+including all primitives, ranges, hold/release deduplication, stale values,
+initial snapshots/resync, session distinction, adapter absence, permission
+boundaries, focus/disable/map/shutdown cleanup, and capacity limits. Native code
+also compiled with GCC `-Wall -Wextra -Wpedantic -Werror`. Python protocol-consumer
+unit tests pass. The complete engine builds and the real player Use smoke still
+produces exactly two schema 2 events with the same session and increasing
+sequence/tick values. The script API is registered using GZDoom's native struct
+bindings, with no arbitrary I/O or permission-grant methods exposed to maps.
+
+## Phase 2 adapter checkpoint
+
+Hosted run [43548328033](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43548328033)
+at **185de2be1** succeeded on Linux and Windows. In addition to both full engine
+builds, CTest and preserved Linux gameplay tests, both runners launched a separate
+native window, routed actual OS keyboard messages, observed movement/actions in
+its report and verified held keys returned to zero. This is Windows window-message
+runtime evidence, rather than an inference from compilation. It does not test the
+later HELIX content or Windows GZDoom interactive graphics.
+
+## Phase 2 playable local checkpoint
+
+On the same Debian host, the full engine rebuilt with the typed native runtime,
+VM bindings, keyboard adapter and first-run startup hook. Three native CTests
+and eight Python tests pass. Native lifecycle tests exercise press/hold/release,
+snapshot reconciliation without trigger replay, focus reset, a stalled heartbeat,
+bounded queue overflow, endpoint failure and deterministic worker shutdown.
+Content tests reject unplayable sector heights and missing stable instrument IDs.
+
+Real GLES/software-rendered gameplay under Xvfb passed these additional cases:
+
+- Bundled first-run path: no `-iwad`, `-file` or `-warp`; DIO01 loads and all eight
+  definitions (including existing player.use) register. The test seeds isolated
+  renderer/configuration settings and a timed exit; it is not a hands-on launch.
+- Actual hitscan shots press pulse and both momentary buttons. Both buttons
+  produce exactly one press and one release, separated by the held interval.
+- Real Use activates latch and selector. Holding Use and looking up drives the
+  analog scalar from 0.5 through intermediate values to 1; release restores 0.5.
+- Walking/warping onto the XY region produces `[0.5,0.5]`; leaving restores `[0,0]`.
+  Test positioning uses the engine's ordinary warp command; interactions use
+  ordinary attack, Use, look and movement inputs, never direct native Publish.
+- The gameplay-to-OS-to-sketchpad test produces markers and line strokes in an
+  actual external SVG drawing. The independent process reports held=0, fires=1,
+  pulses=2, brakes=1, mode=0, positive X/Y movement and nonempty strokes. The SVG
+  is parsed independently for path and circle elements. Native diagnostic and
+  loopback adapters simultaneously consume the same generic stream.
+- Recording live room play, then replaying it: no external event publications.
+  Output-disabled and one-player multiplayer-host cases likewise emit no events.
+- Real engine screenshots reviewed for room geometry, signs, panel state and HUD.
+  This caught incorrect UDMF height property names and bench-relative spawn Z;
+  both were corrected. Graphical inspection verifies rendered content, not a claim
+  of polished hands-on usability. The compact room requires user playtesting.
+- Linux staging includes verified Freedoom, original content, separate native
+  application, engine resources, ZMusic and component notices. No downloaded
+  IWAD, generated PK3, screenshot, build directory or binary is source-controlled.
+
+Generated evidence is under `build/smoke/`, `build/screenshots/` and
+`build/keyboard-endpoint.{json,svg}`. Hosted CI repeats these checks and uploads
+logs, drawings and screenshots; its exact final run is recorded after completion.
+The original player Use positive/disabled/receiver-absent/replay cases remain in CI.
+
+Windows interactive GZDoom rendering, hands-on room usability, audible feedback,
+signed installation and arbitrary third-party target compatibility have not been
+verified here. Windows classic window-message routing is tested in a real separate
+process. Native Wayland, Raw Input/HID, hardware actuation, automatic permissions,
+and general endpoint discovery are intentionally not implemented. The shipped
+software endpoint needs no driver; all physical-device authority remains denied.
+
+The complete playable checkpoint **4810dd855** is verified by hosted run
+[43549371020](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43549371020):
+Linux and Windows both succeeded. Both built the full engine, tested lifecycle
+and real OS keyboard routing, verified external SVG output, and staged first-run
+bundles with legal assets. Linux additionally passed the preserved player Use
+suite and every room live/external/record/replay/disabled/multiplayer/screenshot
+case. Its Windows development artifact is
+[can-doom-run-it-windows](https://github.com/SEsquieu/can-doom-run-it/actions/runs/43549371020/artifacts/14095880764).
+This checkpoint is the first hosted playable build; later verification refinements
+are recorded separately rather than attributed to this run.
+
+Subsequent local verification also launches the sketchpad through the application's
+native `cdr_open_lab` path, with no prestarted endpoint. The test changes actual X11
+window focus while the toggle is held. Native `focus_lost` neutralization and
+permission revocation occur before shutdown; the independent endpoint reports
+zero held keys and neutral selector. Snapshot-consumer tests additionally reject
+mixed snapshot IDs and unknown-control state growth, and prevent trigger events
+from becoming latched cache state. Linux child reaping is nonblocking on the
+endpoint worker. These refinements retain the already successful gameplay path.
+
+The Windows artifact archive was downloaded and its SHA-256 matched the hosted
+digest (`abc2ee2f56732c1a084687144b8c5fc09cfbe46dd17f0b333e29627419beb0a2`
+for the 4810 checkpoint). Inspection confirmed both executables, original room,
+free IWAD, Freedoom notices and ZMusic DLLs. PE import inspection found only
+bundled ZMusic plus Windows system DLLs; the native application and ZMusic use
+the static MSVC runtime. This is packaging evidence, not Windows engine playtesting.
+
+Additional true-color room screenshots were reviewed with `vid_rendermode=4`
+on Mesa llvmpipe. A requested Vulkan startup fell back to GLES/OpenGL presentation
+in this host, so Vulkan runtime validation is not claimed. The software-rendered
+GLES fixture remains the primary repeatable CI gameplay path. Audio devices are
+unavailable in this container; smoke tests use `-nosound`.
+
+## Audio packaging and hosted observer race
+
+Run 43550615167 at 20884d2a7 compiled both engines and passed Linux, but its
+Windows external-window test reported a missing final pulse. The parallel PR
+run 43550622296 passed. Investigation of the failed job (132311981861) showed
+that a fixed 30 ms probe delay allowed shutdown to invalidate the queued pulse
+before the desktop app processed it. The fixture now waits for independently
+observed SVG output, maintains the heartbeat, then explicitly acknowledges the
+probe before shutdown. Cleanup and the 350 ms runtime watchdog remain intact;
+there is no blanket timeout increase or skipped assertion.
+
+A Windows artifact audit also found missing dynamically loaded OpenAL. Packaging
+now builds official OpenAL Soft 1.24.3 from its pinned source, includes the DLL
+and all component notices, and tests actual nonzero loopback PCM. The same pinned
+library built on Linux and rendered 4096 samples locally. This closes the runtime
+packaging gap without claiming audible playback or a Windows graphical engine
+test. Later hosted runs exercise the Windows DLL and corrected observer handshake.
+
+## Fresh-launch keyboard verification
+
+A separate Linux graphical test now launches with **zero command-line arguments**
+and empty XDG user state, using default renderer/audio/settings. It waits for
+advancing simulation and the full typed snapshot, presses actual F6/F7 through
+XTest, observes native authorization and a real E/Use event, disarms the endpoint,
+then types quit in the real console and verifies normal exit. This exposed a
+branding/resource mismatch: the engine's default soundfont name used
+can-doom-run-it while the build copied gzdoom.sf2. The post-build resource now
+uses the derivative's expected filename; the fresh-launch music lookup error is
+gone. No commercial data or font content changed.
+
+The independent application now stays visible in Windows task switching and
+accepts normal later focus, while its initial ShowWindow uses no-activation.
+Linux sets the corresponding no-initial-focus hint. This preserves intentional
+user routing without hiding the external app from Alt-Tab. The default-startup
+test and all gameplay/OS tests retain logs for review; Windows interactive engine
+graphics still need hands-on testing.
+
+## Sketchpad redraw correction — 2026-11-15
+
+Hands-on Windows feedback identified visible flashing that worsened with drawing
+history. The old paint path cleared the visible window, recreated a GDI pen for
+every historical segment and replayed all ink on each timer tick. The correction
+composes complete frames offscreen, caches pens/fonts, and appends new segments
+to a retained ink surface. Cursor/markers remain separate from retained strokes;
+resize and exposure repaint from the cache. Idle timers no longer invalidate
+unchanged frames. X11 likewise presents a completed pixmap instead of clearing
+and incrementally drawing into the visible window. Windows motion now uses
+elapsed time rather than assuming every timer delivery took exactly 16 ms.
+
+The mapping contract is unchanged: native Vector2 is normalized pad position;
+the keyboard profile maps deflection beyond 25% to held arrow keys. The pen
+therefore moves at a velocity while standing off-center, and stops at the center
+or outside the active pad. It does not track position deltas or directly mirror
+absolute player position. The companion UI and play guide now state this.
+
+Local Linux keyboard-to-SVG, in-engine external-output and zero-argument launch
+checks passed after the repaint change. Windows CI additionally runs the actual
+GDI painter with 4096 segments and 1024 markers, comparing incremental/full
+raster output, cursor movement and 240 resized repaints, while checking that
+historical segments are rasterized once and GDI handle counts remain bounded.
+The test renders actual pixels; it does not replace hands-on Windows flicker
+verification. CI also publishes a small companion-only replacement ZIP so an
+existing engine installation can be updated without downloading the IWAD again.

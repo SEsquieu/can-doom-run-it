@@ -66,6 +66,7 @@ version "4.14.2"
 #include "zscript/actors/player/player_cheat.zs"
 #include "zscript/actors/player/player_inventory.zs"
 #include "zscript/actors/player/player_morph.zs"
+#include "zscript/cdr_api.zs"
 
 #include "zscript/actors/shared/botstuff.zs"
 #include "zscript/actors/shared/sharedmisc.zs"
